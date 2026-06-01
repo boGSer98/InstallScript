@@ -245,10 +245,10 @@ install_wkhtmltopdf_from_ubuntu() {
 wkhtml_create_symlinks_if_needed() {
   # symlinks
   if [ -x /usr/local/bin/wkhtmltopdf ] && ! command -v wkhtmltopdf >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltopdf /usr/bin/wkhtmltopdf
   fi
   if [ -x /usr/local/bin/wkhtmltoimage ] && ! command -v wkhtmltoimage >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage
   fi
 }
 

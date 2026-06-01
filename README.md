@@ -71,6 +71,8 @@ Runtime artifacts are written idempotently where possible. The log directory is 
 
 Nginx site activation is rerun-safe: the generated site symlink is updated with `ln -sf`, and removal of the default site uses `rm -f` so the step does not fail if the default site was already removed.
 
+Fallback wkhtmltopdf binary links are also rerun-safe. If `/usr/local/bin/wkhtmltopdf` or `/usr/local/bin/wkhtmltoimage` exists but is not on `PATH`, the installer updates explicit `/usr/bin/...` symlinks with `ln -sf` instead of failing on reruns.
+
 ## Custom addons
 
 By default the installer creates and uses:

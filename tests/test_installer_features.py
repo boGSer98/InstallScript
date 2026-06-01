@@ -94,6 +94,12 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertNotIn('sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME', UBUNTU_SCRIPT)
         self.assertNotIn('sudo rm /etc/nginx/sites-enabled/default', UBUNTU_SCRIPT)
 
+    def test_wkhtmltopdf_binary_symlinks_are_idempotent(self):
+        self.assertIn('sudo ln -sf /usr/local/bin/wkhtmltopdf /usr/bin/wkhtmltopdf', UBUNTU_SCRIPT)
+        self.assertIn('sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true', UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
