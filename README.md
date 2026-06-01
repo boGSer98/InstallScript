@@ -54,6 +54,11 @@ sudo ./odoo_install.sh
 
 The generated Odoo configuration file at `/etc/${OE_CONFIG}.conf` contains the master password (`admin_passwd`). The installer creates it with owner `${OE_USER}:${OE_USER}` and mode `640` before writing any content, so it is not world-readable while secrets are being written.
 
+The final installation summary masks the master password to avoid leaking it into terminal scrollback or copied logs. If you need to retrieve it on the server, read it directly from the protected config file:
+```
+sudo grep "^admin_passwd" "/etc/${OE_CONFIG}.conf"
+```
+
 ## Custom addons
 
 By default the installer creates and uses:
