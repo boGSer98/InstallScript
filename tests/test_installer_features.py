@@ -69,7 +69,7 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('timeout "$COMMAND_TIMEOUT_SECONDS" "$@"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo apt-get update -y', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
-        self.assertIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
 
@@ -99,6 +99,15 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage', UBUNTU_SCRIPT)
         self.assertNotIn('sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true', UBUNTU_SCRIPT)
         self.assertNotIn('sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true', UBUNTU_SCRIPT)
+
+    def test_odoo_source_checkout_is_idempotent(self):
+        self.assertIn('sync_odoo_source() {', UBUNTU_SCRIPT)
+        self.assertIn('if [ -d "$OE_HOME_EXT/.git" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" fetch origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('sudo -u "$OE_USER" git -C "$OE_HOME_EXT" checkout "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" pull --ff-only origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
+        self.assertNotIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
 
 
 if __name__ == "__main__":

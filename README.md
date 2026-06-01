@@ -73,6 +73,8 @@ Nginx site activation is rerun-safe: the generated site symlink is updated with 
 
 Fallback wkhtmltopdf binary links are also rerun-safe. If `/usr/local/bin/wkhtmltopdf` or `/usr/local/bin/wkhtmltoimage` exists but is not on `PATH`, the installer updates explicit `/usr/bin/...` symlinks with `ln -sf` instead of failing on reruns.
 
+Odoo source checkout is resumable. If `${OE_HOME_EXT}` is already a Git checkout, the installer fetches, checks out, and fast-forwards the configured `${OE_VERSION}` as `${OE_USER}` instead of running a second `git clone`. If the target path exists but is not a Git checkout, the installer stops with a clear error instead of overwriting unknown data.
+
 ## Custom addons
 
 By default the installer creates and uses:
