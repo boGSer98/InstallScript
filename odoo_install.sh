@@ -61,6 +61,88 @@ pip_install() {
   fi
 }
 
+fail_config() {
+    echo "Invalid $1: $2" >&2
+    exit 1
+}
+
+require_no_newline() {
+    local name="$1"
+    local value="$2"
+    case "$value" in
+        *$'\n'*|*$'\r'*) fail_config "$name" "newlines are not allowed" ;;
+    esac
+}
+
+validate_identifier() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+    case "$value" in
+        ""|*[!a-zA-Z0-9_-]*) fail_config "$name" "use only letters, numbers, underscores, and dashes" ;;
+    esac
+}
+
+validate_boolean() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+    case "$value" in
+        True|False) ;;
+        *) fail_config "$name" "expected True or False" ;;
+    esac
+}
+
+validate_port() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+    case "$value" in
+        ""|*[!0-9]*) fail_config "$name" "expected a numeric port" ;;
+    esac
+    if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+        fail_config "$name" "port must be between 1 and 65535"
+    fi
+}
+
+validate_managed_path() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+
+    case "$value" in
+        /*) ;;
+        *) fail_config "$name" "path must be absolute" ;;
+    esac
+
+    case "$value" in
+        /|/etc|/etc/*|/usr|/usr/*|/var|/var/*|/home|/home/*|/root|/root/*|/opt|/opt/*|*/../*|*/..|*/.)
+            fail_config "$name" "refusing dangerous path"
+            ;;
+    esac
+}
+
+validate_config() {
+    validate_identifier "OE_USER" "$OE_USER"
+    validate_identifier "OE_CONFIG" "$OE_CONFIG"
+    validate_boolean "INSTALL_WKHTMLTOPDF" "$INSTALL_WKHTMLTOPDF"
+    validate_boolean "IS_ENTERPRISE" "$IS_ENTERPRISE"
+    validate_boolean "UPGRADE_TO_ENTERPRISE" "$UPGRADE_TO_ENTERPRISE"
+    validate_boolean "INSTALL_POSTGRESQL_SIXTEEN" "$INSTALL_POSTGRESQL_SIXTEEN"
+    validate_boolean "INSTALL_NGINX" "$INSTALL_NGINX"
+    validate_boolean "GRANT_ODOO_SUDO" "$GRANT_ODOO_SUDO"
+    validate_boolean "GENERATE_RANDOM_PASSWORD" "$GENERATE_RANDOM_PASSWORD"
+    validate_boolean "ENABLE_SSL" "$ENABLE_SSL"
+    validate_port "OE_PORT" "$OE_PORT"
+    validate_port "LONGPOLLING_PORT" "$LONGPOLLING_PORT"
+    require_no_newline "OE_VERSION" "$OE_VERSION"
+    require_no_newline "OE_SUPERADMIN" "$OE_SUPERADMIN"
+    require_no_newline "WEBSITE_NAME" "$WEBSITE_NAME"
+    require_no_newline "ADMIN_EMAIL" "$ADMIN_EMAIL"
+    validate_managed_path "CUSTOM_ADDONS_PATH" "$CUSTOM_ADDONS_PATH"
+    validate_managed_path "ENTERPRISE_ADDONS_PATH" "$ENTERPRISE_ADDONS_PATH"
+}
+
 install_enterprise_dependencies() {
     pip_install psycopg2-binary pdfminer.six num2words ofxparse dbfread ebaysdk firebase_admin pyOpenSSL
     sudo npm install -g less
@@ -147,6 +229,7 @@ wkhtml_create_symlinks_if_needed() {
 }
 
 detect_arch
+validate_config
 
 if [ "$UPGRADE_TO_ENTERPRISE" = "True" ]; then
   upgrade_to_enterprise

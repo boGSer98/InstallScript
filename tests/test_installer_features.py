@@ -42,6 +42,15 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('echo "Password superadmin (database): <stored in /etc/${OE_CONFIG}.conf>"', UBUNTU_SCRIPT)
         self.assertIn("sudo grep '^admin_passwd = ' /etc/${OE_CONFIG}.conf", UBUNTU_SCRIPT)
 
+    def test_installer_validates_paths_and_scalar_inputs_before_running(self):
+        self.assertIn("validate_config()", UBUNTU_SCRIPT)
+        self.assertIn('validate_managed_path "CUSTOM_ADDONS_PATH" "$CUSTOM_ADDONS_PATH"', UBUNTU_SCRIPT)
+        self.assertIn('validate_managed_path "ENTERPRISE_ADDONS_PATH" "$ENTERPRISE_ADDONS_PATH"', UBUNTU_SCRIPT)
+        self.assertIn('validate_identifier "OE_USER" "$OE_USER"', UBUNTU_SCRIPT)
+        self.assertIn('require_no_newline "OE_SUPERADMIN" "$OE_SUPERADMIN"', UBUNTU_SCRIPT)
+        self.assertIn('fail_config "$name" "refusing dangerous path"', UBUNTU_SCRIPT)
+        self.assertIn('detect_arch\nvalidate_config', UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
