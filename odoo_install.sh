@@ -70,8 +70,13 @@ detect_arch() {
     *)              ARCH_DEB="$arch_raw";;
   esac
 
-  UBUNTU_CODENAME="$(lsb_release -c -s 2>/dev/null || echo noble)"
-  UBUNTU_RELEASE="$(lsb_release -r -s 2>/dev/null || echo 24.04)"
+}
+
+uses_http_port() {
+  case "$OE_VERSION" in
+    8.0|9.0|10.0|11.0) return 1;;
+    *)                  return 0;;
+  esac
 }
 
 install_wkhtmltopdf_from_ubuntu() {
@@ -235,7 +240,7 @@ if [ $GENERATE_RANDOM_PASSWORD = "True" ]; then
     OE_SUPERADMIN=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
 fi
 sudo su root -c "printf 'admin_passwd = ${OE_SUPERADMIN}\n' >> /etc/${OE_CONFIG}.conf"
-if [ $OE_VERSION > "11.0" ];then
+if uses_http_port; then
     sudo su root -c "printf 'http_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
 else
     sudo su root -c "printf 'xmlrpc_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"

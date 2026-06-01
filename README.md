@@ -34,6 +34,14 @@ There are a few things you can configure, this is the most used list:<br/>
 ```
 sudo chmod +x odoo_install.sh
 ```
+
+#### Validate local script changes
+If you modify the installer, run the lightweight validation before committing:
+```
+scripts/validate.sh
+```
+The validator checks Bash syntax and runs ShellCheck when it is installed.
+
 ##### 4. Execute the script:
 ```
 sudo ./odoo_install.sh
