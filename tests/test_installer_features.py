@@ -61,7 +61,7 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn("proxy_set_header Upgrade \\$http_upgrade;", UBUNTU_SCRIPT)
         self.assertIn("proxy_set_header Connection \\$connection_upgrade;", UBUNTU_SCRIPT)
         self.assertIn("proxy_pass http://odoochat;", UBUNTU_SCRIPT)
-        self.assertIn("proxy_mode = True", UBUNTU_SCRIPT)
+        self.assertIn('set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
 
     def test_long_running_network_commands_have_timeouts(self):
         self.assertIn('COMMAND_TIMEOUT_SECONDS="1800"', UBUNTU_SCRIPT)
@@ -108,6 +108,13 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" pull --ff-only origin "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
         self.assertNotIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
+
+    def test_proxy_mode_is_written_idempotently(self):
+        self.assertIn('set_config_value() {', UBUNTU_SCRIPT)
+        self.assertIn('set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
+        self.assertIn('sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"', UBUNTU_SCRIPT)
+        self.assertIn('printf \'%s = %s\\n\' "$key" "$value" | sudo tee -a "$config_file" >/dev/null', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo su root -c "printf \'proxy_mode = True\\n\' >> /etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
 
 
 if __name__ == "__main__":

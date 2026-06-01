@@ -203,6 +203,15 @@ sync_odoo_source() {
     fi
 }
 
+set_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file="$3"
+
+    sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"
+    printf '%s = %s\n' "$key" "$value" | sudo tee -a "$config_file" >/dev/null
+}
+
 write_enterprise_addons_path() {
     sudo sed -i '/^addons_path=/d' "/etc/${OE_CONFIG}.conf"
     sudo su root -c "printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
@@ -618,7 +627,7 @@ EOF
   sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
   sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
-  sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
+  set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"
   echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/sites-available/$WEBSITE_NAME"
 else
   echo "Nginx isn't installed due to choice of the user!"
