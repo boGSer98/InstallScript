@@ -181,10 +181,37 @@ sync_enterprise_addons() {
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
         sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$ENTERPRISE_ADDONS_PATH" ]; then
+        echo "Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout." >&2
+        exit 1
     else
-        sudo rm -rf "$ENTERPRISE_ADDONS_PATH"
         run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
     fi
+}
+
+sync_odoo_source() {
+    echo -e "\n---- Synchronizing Odoo source under $OE_HOME_EXT ----"
+    sudo install -d -o "$OE_USER" -g "$OE_USER" "$OE_HOME"
+
+    if [ -d "$OE_HOME_EXT/.git" ]; then
+        run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" fetch origin "$OE_VERSION"
+        sudo -u "$OE_USER" git -C "$OE_HOME_EXT" checkout "$OE_VERSION"
+        run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$OE_HOME_EXT" ]; then
+        echo "Cannot clone Odoo: $OE_HOME_EXT already exists but is not a Git checkout." >&2
+        exit 1
+    else
+        run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"
+    fi
+}
+
+set_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file="$3"
+
+    sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"
+    printf '%s = %s\n' "$key" "$value" | sudo tee -a "$config_file" >/dev/null
 }
 
 write_enterprise_addons_path() {
@@ -245,10 +272,10 @@ install_wkhtmltopdf_from_ubuntu() {
 wkhtml_create_symlinks_if_needed() {
   # symlinks
   if [ -x /usr/local/bin/wkhtmltopdf ] && ! command -v wkhtmltopdf >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltopdf /usr/bin/wkhtmltopdf
   fi
   if [ -x /usr/local/bin/wkhtmltoimage ] && ! command -v wkhtmltoimage >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage
   fi
 }
 
@@ -352,14 +379,13 @@ else
 fi
 
 echo -e "\n---- Create Log directory ----"
-sudo mkdir /var/log/$OE_USER
-sudo chown $OE_USER:$OE_USER /var/log/$OE_USER
+sudo install -d -o "$OE_USER" -g "$OE_USER" "/var/log/$OE_USER"
 
 #--------------------------------------------------
 # Install ODOO
 #--------------------------------------------------
 echo -e "\n==== Installing ODOO Server ===="
-run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"
+sync_odoo_source
 
 if [ $IS_ENTERPRISE = "True" ]; then
     # Odoo Enterprise install!
@@ -406,9 +432,12 @@ sudo chown "$OE_USER:$OE_USER" "/etc/${OE_CONFIG}.conf"
 sudo chmod 640 "/etc/${OE_CONFIG}.conf"
 
 echo -e "* Create startup file"
-sudo su root -c "echo '#!/bin/sh' >> $OE_HOME_EXT/start.sh"
-sudo su root -c "echo 'sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf' >> $OE_HOME_EXT/start.sh"
-sudo chmod 755 $OE_HOME_EXT/start.sh
+cat <<EOF | sudo tee "$OE_HOME_EXT/start.sh" >/dev/null
+#!/bin/sh
+sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf
+EOF
+sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"
+sudo chmod 755 "$OE_HOME_EXT/start.sh"
 
 #--------------------------------------------------
 # Adding ODOO as a deamon (initscript)
@@ -597,10 +626,10 @@ server {
 EOF
 
   sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME
-  sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME
-  sudo rm /etc/nginx/sites-enabled/default
+  sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
+  sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
-  sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
+  set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"
   echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/sites-available/$WEBSITE_NAME"
 else
   echo "Nginx isn't installed due to choice of the user!"
