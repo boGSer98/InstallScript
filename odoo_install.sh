@@ -36,6 +36,8 @@ UPGRADE_TO_ENTERPRISE="False"
 INSTALL_POSTGRESQL_SIXTEEN="True"
 # Set this to True if you want to install Nginx!
 INSTALL_NGINX="False"
+# Set this to True only if the Odoo service user explicitly needs sudo privileges.
+GRANT_ODOO_SUDO="False"
 # Set the superadmin password - if GENERATE_RANDOM_PASSWORD is set to "True" we will automatically generate a random password, otherwise we use this one
 OE_SUPERADMIN="admin"
 # Set to "True" to generate a random password, "False" to use the variable in OE_SUPERADMIN
@@ -49,20 +51,126 @@ LONGPOLLING_PORT="8072"
 ENABLE_SSL="True"
 # Provide Email to register ssl certificate
 ADMIN_EMAIL="odoo@example.com"
+# Timeout for long-running package, network, and VCS commands.
+COMMAND_TIMEOUT_SECONDS="1800"
+# Timeout for PostgreSQL readiness probes after service start.
+POSTGRES_READY_TIMEOUT_SECONDS="120"
+
+run_with_timeout() {
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$COMMAND_TIMEOUT_SECONDS" "$@"
+  else
+    "$@"
+  fi
+}
+
+wait_for_postgresql() {
+  local elapsed=0
+  while ! sudo -u postgres pg_isready >/dev/null 2>&1; do
+    if [ "$elapsed" -ge "$POSTGRES_READY_TIMEOUT_SECONDS" ]; then
+      echo "PostgreSQL did not become ready within ${POSTGRES_READY_TIMEOUT_SECONDS}s" >&2
+      return 1
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+}
 
 # Helper: pip install with optional --break-system-packages (Ubuntu 24.04 / PEP 668)
 pip_install() {
   if pip3 help install 2>/dev/null | grep -q -- '--break-system-packages'; then
-    sudo -H pip3 install --break-system-packages "$@"
+    run_with_timeout sudo -H pip3 install --break-system-packages "$@"
   else
-    sudo -H pip3 install "$@"
+    run_with_timeout sudo -H pip3 install "$@"
   fi
+}
+
+fail_config() {
+    echo "Invalid $1: $2" >&2
+    exit 1
+}
+
+require_no_newline() {
+    local name="$1"
+    local value="$2"
+    case "$value" in
+        *$'\n'*|*$'\r'*) fail_config "$name" "newlines are not allowed" ;;
+    esac
+}
+
+validate_identifier() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+    case "$value" in
+        ""|*[!a-zA-Z0-9_-]*) fail_config "$name" "use only letters, numbers, underscores, and dashes" ;;
+    esac
+}
+
+validate_boolean() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+    case "$value" in
+        True|False) ;;
+        *) fail_config "$name" "expected True or False" ;;
+    esac
+}
+
+validate_port() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+    case "$value" in
+        ""|*[!0-9]*) fail_config "$name" "expected a numeric port" ;;
+    esac
+    if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+        fail_config "$name" "port must be between 1 and 65535"
+    fi
+}
+
+validate_managed_path() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+
+    case "$value" in
+        /*) ;;
+        *) fail_config "$name" "path must be absolute" ;;
+    esac
+
+    case "$value" in
+        /|/etc|/etc/*|/usr|/usr/*|/var|/var/*|/home|/home/*|/root|/root/*|/opt|/opt/*|*/../*|*/..|*/.)
+            fail_config "$name" "refusing dangerous path"
+            ;;
+    esac
+}
+
+validate_config() {
+    validate_identifier "OE_USER" "$OE_USER"
+    validate_identifier "OE_CONFIG" "$OE_CONFIG"
+    validate_boolean "INSTALL_WKHTMLTOPDF" "$INSTALL_WKHTMLTOPDF"
+    validate_boolean "IS_ENTERPRISE" "$IS_ENTERPRISE"
+    validate_boolean "UPGRADE_TO_ENTERPRISE" "$UPGRADE_TO_ENTERPRISE"
+    validate_boolean "INSTALL_POSTGRESQL_SIXTEEN" "$INSTALL_POSTGRESQL_SIXTEEN"
+    validate_boolean "INSTALL_NGINX" "$INSTALL_NGINX"
+    validate_boolean "GRANT_ODOO_SUDO" "$GRANT_ODOO_SUDO"
+    validate_boolean "GENERATE_RANDOM_PASSWORD" "$GENERATE_RANDOM_PASSWORD"
+    validate_boolean "ENABLE_SSL" "$ENABLE_SSL"
+    validate_port "OE_PORT" "$OE_PORT"
+    validate_port "LONGPOLLING_PORT" "$LONGPOLLING_PORT"
+    require_no_newline "OE_VERSION" "$OE_VERSION"
+    require_no_newline "OE_SUPERADMIN" "$OE_SUPERADMIN"
+    require_no_newline "WEBSITE_NAME" "$WEBSITE_NAME"
+    require_no_newline "ADMIN_EMAIL" "$ADMIN_EMAIL"
+    validate_managed_path "CUSTOM_ADDONS_PATH" "$CUSTOM_ADDONS_PATH"
+    validate_managed_path "ENTERPRISE_ADDONS_PATH" "$ENTERPRISE_ADDONS_PATH"
 }
 
 install_enterprise_dependencies() {
     pip_install psycopg2-binary pdfminer.six num2words ofxparse dbfread ebaysdk firebase_admin pyOpenSSL
-    sudo npm install -g less
-    sudo npm install -g less-plugin-clean-css
+    run_with_timeout sudo npm install -g less
+    run_with_timeout sudo npm install -g less-plugin-clean-css
 }
 
 sync_enterprise_addons() {
@@ -70,13 +178,40 @@ sync_enterprise_addons() {
     sudo install -d -o "$OE_USER" -g "$OE_USER" "$OE_HOME/enterprise"
 
     if [ -d "$ENTERPRISE_ADDONS_PATH/.git" ]; then
-        sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
+        run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
         sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"
-        sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+        run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$ENTERPRISE_ADDONS_PATH" ]; then
+        echo "Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout." >&2
+        exit 1
     else
-        sudo rm -rf "$ENTERPRISE_ADDONS_PATH"
-        sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
+        run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
     fi
+}
+
+sync_odoo_source() {
+    echo -e "\n---- Synchronizing Odoo source under $OE_HOME_EXT ----"
+    sudo install -d -o "$OE_USER" -g "$OE_USER" "$OE_HOME"
+
+    if [ -d "$OE_HOME_EXT/.git" ]; then
+        run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" fetch origin "$OE_VERSION"
+        sudo -u "$OE_USER" git -C "$OE_HOME_EXT" checkout "$OE_VERSION"
+        run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$OE_HOME_EXT" ]; then
+        echo "Cannot clone Odoo: $OE_HOME_EXT already exists but is not a Git checkout." >&2
+        exit 1
+    else
+        run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"
+    fi
+}
+
+set_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file="$3"
+
+    sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"
+    printf '%s = %s\n' "$key" "$value" | sudo tee -a "$config_file" >/dev/null
 }
 
 write_enterprise_addons_path() {
@@ -126,8 +261,8 @@ uses_http_port() {
 }
 
 install_wkhtmltopdf_from_ubuntu() {
-  sudo apt-get update -y
-  if sudo apt-get install -y wkhtmltopdf; then
+  run_with_timeout sudo apt-get update -y
+  if run_with_timeout sudo apt-get install -y wkhtmltopdf; then
     echo "wkhtmltopdf installed from Ubuntu repositories ($ARCH_DEB)."
     return 0
   fi
@@ -137,14 +272,15 @@ install_wkhtmltopdf_from_ubuntu() {
 wkhtml_create_symlinks_if_needed() {
   # symlinks
   if [ -x /usr/local/bin/wkhtmltopdf ] && ! command -v wkhtmltopdf >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltopdf /usr/bin/wkhtmltopdf
   fi
   if [ -x /usr/local/bin/wkhtmltoimage ] && ! command -v wkhtmltoimage >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage
   fi
 }
 
 detect_arch
+validate_config
 
 if [ "$UPGRADE_TO_ENTERPRISE" = "True" ]; then
   upgrade_to_enterprise
@@ -158,9 +294,9 @@ echo -e "\n---- Update Server ----"
 # sudo add-apt-repository universe
 # libpng12-0 dependency for wkhtmltopdf for older Ubuntu versions
 # sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ xenial main"
-sudo apt-get update -y
-sudo apt-get upgrade -y
-sudo apt-get install -y libpq-dev
+run_with_timeout sudo apt-get update -y
+run_with_timeout sudo apt-get upgrade -y
+run_with_timeout sudo apt-get install -y libpq-dev
 
 #--------------------------------------------------
 # Install PostgreSQL Server
@@ -168,17 +304,17 @@ sudo apt-get install -y libpq-dev
 echo -e "\n---- Install PostgreSQL Server ----"
 if [ "$INSTALL_POSTGRESQL_SIXTEEN" = "True" ]; then
     echo -e "\n---- Installing postgreSQL V16 due to the user it's choise ----"
-    sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc|sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+    run_with_timeout sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
     sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-    sudo apt-get update -y
-    sudo apt-get install -y postgresql-16
+    run_with_timeout sudo apt-get update -y
+    run_with_timeout sudo apt-get install -y postgresql-16
     if [ "$IS_ENTERPRISE" = "True" ]; then
       # Ensure PostgreSQL is running before pgvector setup (Ubuntu 24.04 uses systemd)
       sudo systemctl start postgresql || true
       # pgvector is only needed for Enterprise AI features
-      sudo apt-get install -y postgresql-16-pgvector
+      run_with_timeout sudo apt-get install -y postgresql-16-pgvector
       # Wait for PostgreSQL to become available
-      until sudo -u postgres pg_isready >/dev/null 2>&1; do sleep 1; done
+      wait_for_postgresql
       # Create vector extension using a heredoc to avoid any quoting issues
       sudo -u postgres psql -v ON_ERROR_STOP=1 -d template1 <<'SQL'
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -186,7 +322,7 @@ SQL
     fi
 else
     echo -e "\n---- Installing the default postgreSQL version based on Linux version ----"
-    sudo apt-get install postgresql postgresql-server-dev-all -y
+    run_with_timeout sudo apt-get install postgresql postgresql-server-dev-all -y
 fi
 
 echo -e "\n---- Creating the ODOO PostgreSQL User  ----"
@@ -196,8 +332,8 @@ sudo su - postgres -c "createuser -s $OE_USER" 2> /dev/null || true
 # Install Dependencies
 #--------------------------------------------------
 echo -e "\n--- Installing Python 3 + pip3 --"
-sudo apt-get install -y python3 python3-pip
-sudo apt-get install git python3-cffi build-essential wget python3-dev python3-venv python3-wheel libxslt-dev libzip-dev libldap2-dev libsasl2-dev python3-setuptools node-less libpng-dev libjpeg-dev gdebi -y
+run_with_timeout sudo apt-get install -y python3 python3-pip
+run_with_timeout sudo apt-get install git python3-cffi build-essential wget python3-dev python3-venv python3-wheel libxslt-dev libzip-dev libldap2-dev libsasl2-dev python3-setuptools node-less libpng-dev libjpeg-dev gdebi -y
 
 echo -e "\n---- Install python packages/requirements ----"
 pip_install -r https://github.com/odoo/odoo/raw/${OE_VERSION}/requirements.txt
@@ -206,8 +342,8 @@ pip_install -r https://github.com/odoo/odoo/raw/${OE_VERSION}/requirements.txt
 pip_install phonenumbers
 
 echo -e "\n---- Installing nodeJS NPM and rtlcss for LTR support ----"
-sudo apt-get install nodejs npm -y
-sudo npm install -g rtlcss
+run_with_timeout sudo apt-get install nodejs npm -y
+run_with_timeout sudo npm install -g rtlcss
 
 #--------------------------------------------------
 # Install Wkhtmltopdf if needed
@@ -235,18 +371,21 @@ fi
 
 echo -e "\n---- Create ODOO system user ----"
 sudo adduser --system --quiet --shell=/bin/bash --home=$OE_HOME --gecos 'ODOO' --group $OE_USER
-#The user should also be added to the sudo'ers group.
-sudo adduser $OE_USER sudo
+if [ "$GRANT_ODOO_SUDO" = "True" ]; then
+  echo -e "\n---- Granting sudo privileges to ODOO system user ----"
+  sudo adduser "$OE_USER" sudo
+else
+  echo -e "\n---- ODOO system user will not receive sudo privileges ----"
+fi
 
 echo -e "\n---- Create Log directory ----"
-sudo mkdir /var/log/$OE_USER
-sudo chown $OE_USER:$OE_USER /var/log/$OE_USER
+sudo install -d -o "$OE_USER" -g "$OE_USER" "/var/log/$OE_USER"
 
 #--------------------------------------------------
 # Install ODOO
 #--------------------------------------------------
 echo -e "\n==== Installing ODOO Server ===="
-sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/odoo $OE_HOME_EXT/
+sync_odoo_source
 
 if [ $IS_ENTERPRISE = "True" ]; then
     # Odoo Enterprise install!
@@ -263,34 +402,42 @@ sudo chown -R $OE_USER:$OE_USER $OE_HOME/*
 
 echo -e "* Create server config file"
 
-
-sudo touch /etc/${OE_CONFIG}.conf
-echo -e "* Creating server config file"
-sudo su root -c "printf '[options] \n; This is the password that allows database operations:\n' >> /etc/${OE_CONFIG}.conf"
+sudo install -m 640 -o "$OE_USER" -g "$OE_USER" /dev/null "/etc/${OE_CONFIG}.conf"
 if [ $GENERATE_RANDOM_PASSWORD = "True" ]; then
     echo -e "* Generating random admin password"
     OE_SUPERADMIN=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
 fi
-sudo su root -c "printf 'admin_passwd = ${OE_SUPERADMIN}\n' >> /etc/${OE_CONFIG}.conf"
+
 if uses_http_port; then
-    sudo su root -c "printf 'http_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
+    ODOO_PORT_CONFIG="http_port = ${OE_PORT}"
 else
-    sudo su root -c "printf 'xmlrpc_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
+    ODOO_PORT_CONFIG="xmlrpc_port = ${OE_PORT}"
 fi
-sudo su root -c "printf 'logfile = /var/log/${OE_USER}/${OE_CONFIG}.log\n' >> /etc/${OE_CONFIG}.conf"
 
 if [ $IS_ENTERPRISE = "True" ]; then
-    write_enterprise_addons_path
+    ODOO_ADDONS_PATH="${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
 else
-    sudo su root -c "printf 'addons_path=${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
+    ODOO_ADDONS_PATH="${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
 fi
-sudo chown $OE_USER:$OE_USER /etc/${OE_CONFIG}.conf
-sudo chmod 640 /etc/${OE_CONFIG}.conf
+
+cat <<EOF | sudo tee "/etc/${OE_CONFIG}.conf" >/dev/null
+[options]
+; This is the password that allows database operations:
+admin_passwd = ${OE_SUPERADMIN}
+${ODOO_PORT_CONFIG}
+logfile = /var/log/${OE_USER}/${OE_CONFIG}.log
+addons_path=${ODOO_ADDONS_PATH}
+EOF
+sudo chown "$OE_USER:$OE_USER" "/etc/${OE_CONFIG}.conf"
+sudo chmod 640 "/etc/${OE_CONFIG}.conf"
 
 echo -e "* Create startup file"
-sudo su root -c "echo '#!/bin/sh' >> $OE_HOME_EXT/start.sh"
-sudo su root -c "echo 'sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf' >> $OE_HOME_EXT/start.sh"
-sudo chmod 755 $OE_HOME_EXT/start.sh
+cat <<EOF | sudo tee "$OE_HOME_EXT/start.sh" >/dev/null
+#!/bin/sh
+sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf
+EOF
+sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"
+sudo chmod 755 "$OE_HOME_EXT/start.sh"
 
 #--------------------------------------------------
 # Adding ODOO as a deamon (initscript)
@@ -376,8 +523,21 @@ sudo update-rc.d $OE_CONFIG defaults
 #--------------------------------------------------
 if [ $INSTALL_NGINX = "True" ]; then
   echo -e "\n---- Installing and setting up Nginx ----"
-  sudo apt-get install -y nginx
+  run_with_timeout sudo apt-get install -y nginx
   cat <<EOF > ~/odoo
+upstream odoo {
+  server 127.0.0.1:$OE_PORT;
+}
+
+upstream odoochat {
+  server 127.0.0.1:$LONGPOLLING_PORT;
+}
+
+map \$http_upgrade \$connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
 server {
   listen 80;
 
@@ -385,6 +545,7 @@ server {
   server_name $WEBSITE_NAME;
 
   # Add Headers for odoo proxy mode
+  proxy_set_header Host \$host;
   proxy_set_header X-Forwarded-Host \$host;
   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto \$scheme;
@@ -426,18 +587,30 @@ server {
   client_max_body_size 0;
 
   location / {
-    proxy_pass    http://127.0.0.1:$OE_PORT;
+    proxy_pass    http://odoo;
     # by default, do not forward anything
     proxy_redirect off;
   }
 
+  location /websocket {
+    proxy_pass http://odoochat;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \$connection_upgrade;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Real-IP \$remote_addr;
+  }
+
   location /longpolling {
-    proxy_pass http://127.0.0.1:$LONGPOLLING_PORT;
+    proxy_pass http://odoochat;
   }
 
   location ~* .(js|css|png|jpg|jpeg|gif|ico)$ {
     expires 2d;
-    proxy_pass http://127.0.0.1:$OE_PORT;
+    proxy_pass http://odoo;
     add_header Cache-Control "public, no-transform";
   }
 
@@ -447,16 +620,16 @@ server {
     proxy_cache_valid 404      1m;
     proxy_buffering    on;
     expires 864000;
-    proxy_pass    http://127.0.0.1:$OE_PORT;
+    proxy_pass    http://odoo;
   }
 }
 EOF
 
   sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME
-  sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME
-  sudo rm /etc/nginx/sites-enabled/default
+  sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
+  sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
-  sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
+  set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"
   echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/sites-available/$WEBSITE_NAME"
 else
   echo "Nginx isn't installed due to choice of the user!"
@@ -467,11 +640,12 @@ fi
 #--------------------------------------------------
 
 if [ $INSTALL_NGINX = "True" ] && [ $ENABLE_SSL = "True" ] && [ $ADMIN_EMAIL != "odoo@example.com" ]  && [ $WEBSITE_NAME != "_" ];then
-  sudo apt-get update -y
-  sudo apt-get install -y snapd
-  sudo snap install core; snap refresh core
-  sudo snap install --classic certbot
-  sudo apt-get install python3-certbot-nginx -y
+  run_with_timeout sudo apt-get update -y
+  run_with_timeout sudo apt-get install -y snapd
+  run_with_timeout sudo snap install core
+  run_with_timeout sudo snap refresh core
+  run_with_timeout sudo snap install --classic certbot
+  run_with_timeout sudo apt-get install python3-certbot-nginx -y
   sudo certbot --nginx -d $WEBSITE_NAME --noninteractive --agree-tos --email $ADMIN_EMAIL --redirect
   sudo service nginx reload
   echo "SSL/HTTPS is enabled!"
@@ -497,7 +671,8 @@ echo "Logfile location: /var/log/$OE_USER"
 echo "User PostgreSQL: $OE_USER"
 echo "Code location: $OE_USER"
 echo "Addons folder: $OE_USER/$OE_CONFIG/addons/"
-echo "Password superadmin (database): $OE_SUPERADMIN"
+echo "Password superadmin (database): <stored in /etc/${OE_CONFIG}.conf>"
+echo "Show master password: sudo grep '^admin_passwd = ' /etc/${OE_CONFIG}.conf"
 echo "Start Odoo service: sudo service $OE_CONFIG start"
 echo "Stop Odoo service: sudo service $OE_CONFIG stop"
 echo "Restart Odoo service: sudo service $OE_CONFIG restart"
