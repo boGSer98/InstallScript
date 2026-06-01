@@ -26,6 +26,7 @@ There are a few things you can configure, this is the most used list:<br/>
 ```CUSTOM_ADDONS_PATH``` is the custom addons directory. It defaults to ```/odoo/custom/addons``` and is always kept in ```addons_path```, including Enterprise installations and later Enterprise upgrades.<br/>
 ```OE_SUPERADMIN``` is the master password for this Odoo installation.<br/>
 ```INSTALL_NGINX``` is set to ```False``` by default. Set this to ```True``` if you want to install Nginx.<br/>
+```GRANT_ODOO_SUDO``` is set to ```False``` by default. The Odoo service user normally does not need sudo privileges; only set this to ```True``` for special custom workflows that explicitly require it.<br/>
 ```WEBSITE_NAME``` Set the website name here for nginx configuration<br/>
 ```ENABLE_SSL``` Set this to ```True``` to install [certbot](https://github.com/certbot/certbot) and configure nginx with https using a free Let's Encrypted certificate<br/>
 ```ADMIN_EMAIL``` Email is needed to register for Let's Encrypt registration. Replace the default placeholder with an email of your organisation.<br/>

@@ -23,6 +23,11 @@ class InstallerFeatureTests(unittest.TestCase):
         expected = "sudo su root -c \"printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\\n'"
         self.assertIn(expected, UBUNTU_SCRIPT)
 
+    def test_odoo_user_does_not_get_sudo_by_default(self):
+        self.assertIn('GRANT_ODOO_SUDO="False"', UBUNTU_SCRIPT)
+        self.assertIn('if [ "$GRANT_ODOO_SUDO" = "True" ]; then', UBUNTU_SCRIPT)
+        self.assertNotIn("sudo adduser $OE_USER sudo\n", UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()

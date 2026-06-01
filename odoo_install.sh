@@ -36,6 +36,8 @@ UPGRADE_TO_ENTERPRISE="False"
 INSTALL_POSTGRESQL_SIXTEEN="True"
 # Set this to True if you want to install Nginx!
 INSTALL_NGINX="False"
+# Set this to True only if the Odoo service user explicitly needs sudo privileges.
+GRANT_ODOO_SUDO="False"
 # Set the superadmin password - if GENERATE_RANDOM_PASSWORD is set to "True" we will automatically generate a random password, otherwise we use this one
 OE_SUPERADMIN="admin"
 # Set to "True" to generate a random password, "False" to use the variable in OE_SUPERADMIN
@@ -235,8 +237,12 @@ fi
 
 echo -e "\n---- Create ODOO system user ----"
 sudo adduser --system --quiet --shell=/bin/bash --home=$OE_HOME --gecos 'ODOO' --group $OE_USER
-#The user should also be added to the sudo'ers group.
-sudo adduser $OE_USER sudo
+if [ "$GRANT_ODOO_SUDO" = "True" ]; then
+  echo -e "\n---- Granting sudo privileges to ODOO system user ----"
+  sudo adduser "$OE_USER" sudo
+else
+  echo -e "\n---- ODOO system user will not receive sudo privileges ----"
+fi
 
 echo -e "\n---- Create Log directory ----"
 sudo mkdir /var/log/$OE_USER
