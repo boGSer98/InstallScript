@@ -37,6 +37,14 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn("cat <<EOF | sudo tee \"/etc/${OE_CONFIG}.conf\" >/dev/null", UBUNTU_SCRIPT)
         self.assertIn("admin_passwd = ${OE_SUPERADMIN}", UBUNTU_SCRIPT)
 
+    def test_final_summary_masks_superadmin_password(self):
+        self.assertNotIn('echo "Password superadmin (database): $OE_SUPERADMIN"', UBUNTU_SCRIPT)
+        self.assertIn('echo "Password superadmin (database): ********"', UBUNTU_SCRIPT)
+        self.assertIn(
+            'Retrieve superadmin password: sudo grep ^admin_passwd \\\"/etc/${OE_CONFIG}.conf\\\"',
+            UBUNTU_SCRIPT,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
