@@ -352,8 +352,7 @@ else
 fi
 
 echo -e "\n---- Create Log directory ----"
-sudo mkdir /var/log/$OE_USER
-sudo chown $OE_USER:$OE_USER /var/log/$OE_USER
+sudo install -d -o "$OE_USER" -g "$OE_USER" "/var/log/$OE_USER"
 
 #--------------------------------------------------
 # Install ODOO
@@ -406,9 +405,12 @@ sudo chown "$OE_USER:$OE_USER" "/etc/${OE_CONFIG}.conf"
 sudo chmod 640 "/etc/${OE_CONFIG}.conf"
 
 echo -e "* Create startup file"
-sudo su root -c "echo '#!/bin/sh' >> $OE_HOME_EXT/start.sh"
-sudo su root -c "echo 'sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf' >> $OE_HOME_EXT/start.sh"
-sudo chmod 755 $OE_HOME_EXT/start.sh
+cat <<EOF | sudo tee "$OE_HOME_EXT/start.sh" >/dev/null
+#!/bin/sh
+sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf
+EOF
+sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"
+sudo chmod 755 "$OE_HOME_EXT/start.sh"
 
 #--------------------------------------------------
 # Adding ODOO as a deamon (initscript)

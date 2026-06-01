@@ -67,6 +67,8 @@ Long-running package, network, and Git commands are wrapped with `run_with_timeo
 
 PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
 
+Runtime artifacts are written idempotently where possible. The log directory is created with `install -d` so reruns can reuse it safely, and `start.sh` is overwritten in one pass instead of appended to on every run.
+
 ## Custom addons
 
 By default the installer creates and uses:

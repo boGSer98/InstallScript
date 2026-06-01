@@ -81,6 +81,13 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('PostgreSQL did not become ready within ${POSTGRES_READY_TIMEOUT_SECONDS}s', UBUNTU_SCRIPT)
         self.assertNotIn('until sudo -u postgres pg_isready >/dev/null 2>&1; do sleep 1; done', UBUNTU_SCRIPT)
 
+    def test_runtime_files_are_written_idempotently(self):
+        self.assertIn('sudo install -d -o "$OE_USER" -g "$OE_USER" "/var/log/$OE_USER"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo mkdir /var/log/$OE_USER', UBUNTU_SCRIPT)
+        self.assertIn('cat <<EOF | sudo tee "$OE_HOME_EXT/start.sh" >/dev/null', UBUNTU_SCRIPT)
+        self.assertIn('sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"', UBUNTU_SCRIPT)
+        self.assertNotIn('>> $OE_HOME_EXT/start.sh', UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
