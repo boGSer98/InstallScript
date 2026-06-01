@@ -181,8 +181,10 @@ sync_enterprise_addons() {
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
         sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$ENTERPRISE_ADDONS_PATH" ]; then
+        echo "Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout." >&2
+        exit 1
     else
-        sudo rm -rf "$ENTERPRISE_ADDONS_PATH"
         run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
     fi
 }
@@ -201,6 +203,15 @@ sync_odoo_source() {
     else
         run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"
     fi
+}
+
+set_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file="$3"
+
+    sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"
+    printf '%s = %s\n' "$key" "$value" | sudo tee -a "$config_file" >/dev/null
 }
 
 write_enterprise_addons_path() {
@@ -618,7 +629,7 @@ EOF
   sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
   sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
-  sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
+  set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"
   echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/sites-available/$WEBSITE_NAME"
 else
   echo "Nginx isn't installed due to choice of the user!"
