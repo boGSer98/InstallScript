@@ -51,6 +51,18 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('fail_config "$name" "refusing dangerous path"', UBUNTU_SCRIPT)
         self.assertIn('detect_arch\nvalidate_config', UBUNTU_SCRIPT)
 
+    def test_nginx_config_supports_odoo_websocket_and_proxy_mode(self):
+        self.assertIn("map \\$http_upgrade \\$connection_upgrade", UBUNTU_SCRIPT)
+        self.assertIn("upstream odoo {", UBUNTU_SCRIPT)
+        self.assertIn("upstream odoochat {", UBUNTU_SCRIPT)
+        self.assertIn("proxy_set_header Host \\$host;", UBUNTU_SCRIPT)
+        self.assertIn("location /websocket {", UBUNTU_SCRIPT)
+        self.assertIn("proxy_http_version 1.1;", UBUNTU_SCRIPT)
+        self.assertIn("proxy_set_header Upgrade \\$http_upgrade;", UBUNTU_SCRIPT)
+        self.assertIn("proxy_set_header Connection \\$connection_upgrade;", UBUNTU_SCRIPT)
+        self.assertIn("proxy_pass http://odoochat;", UBUNTU_SCRIPT)
+        self.assertIn("proxy_mode = True", UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()

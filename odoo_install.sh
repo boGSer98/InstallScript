@@ -472,6 +472,19 @@ if [ $INSTALL_NGINX = "True" ]; then
   echo -e "\n---- Installing and setting up Nginx ----"
   sudo apt-get install -y nginx
   cat <<EOF > ~/odoo
+upstream odoo {
+  server 127.0.0.1:$OE_PORT;
+}
+
+upstream odoochat {
+  server 127.0.0.1:$LONGPOLLING_PORT;
+}
+
+map \$http_upgrade \$connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
 server {
   listen 80;
 
@@ -479,6 +492,7 @@ server {
   server_name $WEBSITE_NAME;
 
   # Add Headers for odoo proxy mode
+  proxy_set_header Host \$host;
   proxy_set_header X-Forwarded-Host \$host;
   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
   proxy_set_header X-Forwarded-Proto \$scheme;
@@ -520,18 +534,30 @@ server {
   client_max_body_size 0;
 
   location / {
-    proxy_pass    http://127.0.0.1:$OE_PORT;
+    proxy_pass    http://odoo;
     # by default, do not forward anything
     proxy_redirect off;
   }
 
+  location /websocket {
+    proxy_pass http://odoochat;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \$connection_upgrade;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Real-IP \$remote_addr;
+  }
+
   location /longpolling {
-    proxy_pass http://127.0.0.1:$LONGPOLLING_PORT;
+    proxy_pass http://odoochat;
   }
 
   location ~* .(js|css|png|jpg|jpeg|gif|ico)$ {
     expires 2d;
-    proxy_pass http://127.0.0.1:$OE_PORT;
+    proxy_pass http://odoo;
     add_header Cache-Control "public, no-transform";
   }
 
@@ -541,7 +567,7 @@ server {
     proxy_cache_valid 404      1m;
     proxy_buffering    on;
     expires 864000;
-    proxy_pass    http://127.0.0.1:$OE_PORT;
+    proxy_pass    http://odoo;
   }
 }
 EOF

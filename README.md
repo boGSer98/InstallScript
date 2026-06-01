@@ -8,6 +8,8 @@ This script can be safely used in a multi-odoo code base server because the defa
 ## Installing Nginx
 If you set the parameter ```INSTALL_NGINX``` to ```True``` you should also configure workers. Without workers you will probably get connection loss issues. Look at [the deployment guide from Odoo](https://www.odoo.com/documentation/19.0/administration/install/deploy.html) on how to configure workers.
 
+The generated Nginx configuration enables Odoo proxy mode and includes separate upstreams for the main HTTP service and the longpolling/websocket service. The `/websocket` route is configured with HTTP/1.1 upgrade headers so Odoo realtime features can work behind the reverse proxy.
+
 ## Installation procedure
 
 ##### 1. Download the script:
