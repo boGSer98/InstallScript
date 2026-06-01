@@ -63,6 +63,8 @@ sudo grep '^admin_passwd = ' /etc/${OE_CONFIG}.conf
 
 The installer validates operator-editable scalar values before running package installation or file writes. Boolean flags must be `True` or `False`, ports must be numeric and within `1-65535`, identifiers such as `OE_USER` and `OE_CONFIG` may only contain letters, numbers, underscores, and dashes, and custom/enterprise addon paths must be absolute managed paths outside critical system roots such as `/`, `/etc`, `/usr`, `/var`, `/home`, `/root`, and `/opt`.
 
+Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
+
 ## Custom addons
 
 By default the installer creates and uses:

@@ -63,6 +63,16 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn("proxy_pass http://odoochat;", UBUNTU_SCRIPT)
         self.assertIn("proxy_mode = True", UBUNTU_SCRIPT)
 
+    def test_long_running_network_commands_have_timeouts(self):
+        self.assertIn('COMMAND_TIMEOUT_SECONDS="1800"', UBUNTU_SCRIPT)
+        self.assertIn("run_with_timeout()", UBUNTU_SCRIPT)
+        self.assertIn('timeout "$COMMAND_TIMEOUT_SECONDS" "$@"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo apt-get update -y', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
