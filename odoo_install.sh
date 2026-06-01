@@ -181,8 +181,10 @@ sync_enterprise_addons() {
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
         sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$ENTERPRISE_ADDONS_PATH" ]; then
+        echo "Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout." >&2
+        exit 1
     else
-        sudo rm -rf "$ENTERPRISE_ADDONS_PATH"
         run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
     fi
 }
