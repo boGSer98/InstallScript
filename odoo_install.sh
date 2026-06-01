@@ -53,6 +53,8 @@ ENABLE_SSL="True"
 ADMIN_EMAIL="odoo@example.com"
 # Timeout for long-running package, network, and VCS commands.
 COMMAND_TIMEOUT_SECONDS="1800"
+# Timeout for PostgreSQL readiness probes after service start.
+POSTGRES_READY_TIMEOUT_SECONDS="120"
 
 run_with_timeout() {
   if command -v timeout >/dev/null 2>&1; then
@@ -60,6 +62,18 @@ run_with_timeout() {
   else
     "$@"
   fi
+}
+
+wait_for_postgresql() {
+  local elapsed=0
+  while ! sudo -u postgres pg_isready >/dev/null 2>&1; do
+    if [ "$elapsed" -ge "$POSTGRES_READY_TIMEOUT_SECONDS" ]; then
+      echo "PostgreSQL did not become ready within ${POSTGRES_READY_TIMEOUT_SECONDS}s" >&2
+      return 1
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
 }
 
 # Helper: pip install with optional --break-system-packages (Ubuntu 24.04 / PEP 668)
@@ -167,10 +181,37 @@ sync_enterprise_addons() {
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
         sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"
         run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$ENTERPRISE_ADDONS_PATH" ]; then
+        echo "Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout." >&2
+        exit 1
     else
-        sudo rm -rf "$ENTERPRISE_ADDONS_PATH"
         run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
     fi
+}
+
+sync_odoo_source() {
+    echo -e "\n---- Synchronizing Odoo source under $OE_HOME_EXT ----"
+    sudo install -d -o "$OE_USER" -g "$OE_USER" "$OE_HOME"
+
+    if [ -d "$OE_HOME_EXT/.git" ]; then
+        run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" fetch origin "$OE_VERSION"
+        sudo -u "$OE_USER" git -C "$OE_HOME_EXT" checkout "$OE_VERSION"
+        run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" pull --ff-only origin "$OE_VERSION"
+    elif [ -e "$OE_HOME_EXT" ]; then
+        echo "Cannot clone Odoo: $OE_HOME_EXT already exists but is not a Git checkout." >&2
+        exit 1
+    else
+        run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"
+    fi
+}
+
+set_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file="$3"
+
+    sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"
+    printf '%s = %s\n' "$key" "$value" | sudo tee -a "$config_file" >/dev/null
 }
 
 write_enterprise_addons_path() {
@@ -231,10 +272,10 @@ install_wkhtmltopdf_from_ubuntu() {
 wkhtml_create_symlinks_if_needed() {
   # symlinks
   if [ -x /usr/local/bin/wkhtmltopdf ] && ! command -v wkhtmltopdf >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltopdf /usr/bin/wkhtmltopdf
   fi
   if [ -x /usr/local/bin/wkhtmltoimage ] && ! command -v wkhtmltoimage >/dev/null 2>&1; then
-    sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true
+    sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage
   fi
 }
 
@@ -273,7 +314,7 @@ if [ "$INSTALL_POSTGRESQL_SIXTEEN" = "True" ]; then
       # pgvector is only needed for Enterprise AI features
       run_with_timeout sudo apt-get install -y postgresql-16-pgvector
       # Wait for PostgreSQL to become available
-      until sudo -u postgres pg_isready >/dev/null 2>&1; do sleep 1; done
+      wait_for_postgresql
       # Create vector extension using a heredoc to avoid any quoting issues
       sudo -u postgres psql -v ON_ERROR_STOP=1 -d template1 <<'SQL'
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -338,14 +379,13 @@ else
 fi
 
 echo -e "\n---- Create Log directory ----"
-sudo mkdir /var/log/$OE_USER
-sudo chown $OE_USER:$OE_USER /var/log/$OE_USER
+sudo install -d -o "$OE_USER" -g "$OE_USER" "/var/log/$OE_USER"
 
 #--------------------------------------------------
 # Install ODOO
 #--------------------------------------------------
 echo -e "\n==== Installing ODOO Server ===="
-run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"
+sync_odoo_source
 
 if [ $IS_ENTERPRISE = "True" ]; then
     # Odoo Enterprise install!
@@ -392,9 +432,12 @@ sudo chown "$OE_USER:$OE_USER" "/etc/${OE_CONFIG}.conf"
 sudo chmod 640 "/etc/${OE_CONFIG}.conf"
 
 echo -e "* Create startup file"
-sudo su root -c "echo '#!/bin/sh' >> $OE_HOME_EXT/start.sh"
-sudo su root -c "echo 'sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf' >> $OE_HOME_EXT/start.sh"
-sudo chmod 755 $OE_HOME_EXT/start.sh
+cat <<EOF | sudo tee "$OE_HOME_EXT/start.sh" >/dev/null
+#!/bin/sh
+sudo -u $OE_USER $OE_HOME_EXT/odoo-bin --config=/etc/${OE_CONFIG}.conf
+EOF
+sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"
+sudo chmod 755 "$OE_HOME_EXT/start.sh"
 
 #--------------------------------------------------
 # Adding ODOO as a deamon (initscript)
@@ -583,10 +626,10 @@ server {
 EOF
 
   sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME
-  sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME
-  sudo rm /etc/nginx/sites-enabled/default
+  sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
+  sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
-  sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
+  set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"
   echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/sites-available/$WEBSITE_NAME"
 else
   echo "Nginx isn't installed due to choice of the user!"

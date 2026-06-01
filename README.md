@@ -65,6 +65,20 @@ The installer validates operator-editable scalar values before running package i
 
 Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
 
+PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
+
+Runtime artifacts are written idempotently where possible. The log directory is created with `install -d` so reruns can reuse it safely, and `start.sh` is overwritten in one pass instead of appended to on every run.
+
+Nginx site activation is rerun-safe: the generated site symlink is updated with `ln -sf`, and removal of the default site uses `rm -f` so the step does not fail if the default site was already removed.
+
+Fallback wkhtmltopdf binary links are also rerun-safe. If `/usr/local/bin/wkhtmltopdf` or `/usr/local/bin/wkhtmltoimage` exists but is not on `PATH`, the installer updates explicit `/usr/bin/...` symlinks with `ln -sf` instead of failing on reruns.
+
+Odoo source checkout is resumable. If `${OE_HOME_EXT}` is already a Git checkout, the installer fetches, checks out, and fast-forwards the configured `${OE_VERSION}` as `${OE_USER}` instead of running a second `git clone`. If the target path exists but is not a Git checkout, the installer stops with a clear error instead of overwriting unknown data.
+
+Enterprise addons checkout follows the same resumable pattern. If `${ENTERPRISE_ADDONS_PATH}` is already a Git checkout, the installer updates it in place as `${OE_USER}`; if the path exists but is not a Git checkout, the installer aborts instead of deleting or replacing existing data.
+
+When Nginx is enabled, the installer sets `proxy_mode = True` idempotently. Existing `proxy_mode` entries are removed before the value is appended, so repeated runs do not duplicate the option in `/etc/${OE_CONFIG}.conf`.
+
 ## Custom addons
 
 By default the installer creates and uses:

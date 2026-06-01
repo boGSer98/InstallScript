@@ -61,7 +61,7 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn("proxy_set_header Upgrade \\$http_upgrade;", UBUNTU_SCRIPT)
         self.assertIn("proxy_set_header Connection \\$connection_upgrade;", UBUNTU_SCRIPT)
         self.assertIn("proxy_pass http://odoochat;", UBUNTU_SCRIPT)
-        self.assertIn("proxy_mode = True", UBUNTU_SCRIPT)
+        self.assertIn('set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
 
     def test_long_running_network_commands_have_timeouts(self):
         self.assertIn('COMMAND_TIMEOUT_SECONDS="1800"', UBUNTU_SCRIPT)
@@ -69,9 +69,62 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('timeout "$COMMAND_TIMEOUT_SECONDS" "$@"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo apt-get update -y', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
-        self.assertIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
+
+    def test_postgresql_readiness_wait_is_bounded(self):
+        self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
+        self.assertIn("wait_for_postgresql()", UBUNTU_SCRIPT)
+        self.assertIn('while ! sudo -u postgres pg_isready >/dev/null 2>&1; do', UBUNTU_SCRIPT)
+        self.assertIn('if [ "$elapsed" -ge "$POSTGRES_READY_TIMEOUT_SECONDS" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('PostgreSQL did not become ready within ${POSTGRES_READY_TIMEOUT_SECONDS}s', UBUNTU_SCRIPT)
+        self.assertNotIn('until sudo -u postgres pg_isready >/dev/null 2>&1; do sleep 1; done', UBUNTU_SCRIPT)
+
+    def test_runtime_files_are_written_idempotently(self):
+        self.assertIn('sudo install -d -o "$OE_USER" -g "$OE_USER" "/var/log/$OE_USER"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo mkdir /var/log/$OE_USER', UBUNTU_SCRIPT)
+        self.assertIn('cat <<EOF | sudo tee "$OE_HOME_EXT/start.sh" >/dev/null', UBUNTU_SCRIPT)
+        self.assertIn('sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"', UBUNTU_SCRIPT)
+        self.assertNotIn('>> $OE_HOME_EXT/start.sh', UBUNTU_SCRIPT)
+
+    def test_nginx_site_activation_is_idempotent(self):
+        self.assertIn('sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn('sudo rm -f /etc/nginx/sites-enabled/default', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo rm /etc/nginx/sites-enabled/default', UBUNTU_SCRIPT)
+
+    def test_wkhtmltopdf_binary_symlinks_are_idempotent(self):
+        self.assertIn('sudo ln -sf /usr/local/bin/wkhtmltopdf /usr/bin/wkhtmltopdf', UBUNTU_SCRIPT)
+        self.assertIn('sudo ln -sf /usr/local/bin/wkhtmltoimage /usr/bin/wkhtmltoimage', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo ln -s /usr/local/bin/wkhtmltopdf /usr/bin || true', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo ln -s /usr/local/bin/wkhtmltoimage /usr/bin || true', UBUNTU_SCRIPT)
+
+    def test_odoo_source_checkout_is_idempotent(self):
+        self.assertIn('sync_odoo_source() {', UBUNTU_SCRIPT)
+        self.assertIn('if [ -d "$OE_HOME_EXT/.git" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" fetch origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('sudo -u "$OE_USER" git -C "$OE_HOME_EXT" checkout "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$OE_HOME_EXT" pull --ff-only origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
+        self.assertNotIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
+
+    def test_enterprise_addons_checkout_is_idempotent(self):
+        self.assertIn('sync_enterprise_addons() {', UBUNTU_SCRIPT)
+        self.assertIn('if [ -d "$ENTERPRISE_ADDONS_PATH/.git" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout.', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo rm -rf "$ENTERPRISE_ADDONS_PATH"', UBUNTU_SCRIPT)
+
+    def test_proxy_mode_is_written_idempotently(self):
+        self.assertIn('set_config_value() {', UBUNTU_SCRIPT)
+        self.assertIn('set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
+        self.assertIn('sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"', UBUNTU_SCRIPT)
+        self.assertIn('printf \'%s = %s\\n\' "$key" "$value" | sudo tee -a "$config_file" >/dev/null', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo su root -c "printf \'proxy_mode = True\\n\' >> /etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
 
 
 if __name__ == "__main__":
