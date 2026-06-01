@@ -8,6 +8,8 @@ This script can be safely used in a multi-odoo code base server because the defa
 ## Installing Nginx
 If you set the parameter ```INSTALL_NGINX``` to ```True``` you should also configure workers. Without workers you will probably get connection loss issues. Look at [the deployment guide from Odoo](https://www.odoo.com/documentation/19.0/administration/install/deploy.html) on how to configure workers.
 
+The generated Nginx configuration enables Odoo proxy mode and includes separate upstreams for the main HTTP service and the longpolling/websocket service. The `/websocket` route is configured with HTTP/1.1 upgrade headers so Odoo realtime features can work behind the reverse proxy.
+
 ## Installation procedure
 
 ##### 1. Download the script:
@@ -49,6 +51,33 @@ The validator checks Bash syntax and runs ShellCheck when it is installed.
 ```
 sudo ./odoo_install.sh
 ```
+
+## Security notes
+
+The generated Odoo configuration file at `/etc/${OE_CONFIG}.conf` contains the master password (`admin_passwd`). The installer creates it with owner `${OE_USER}:${OE_USER}` and mode `640` before writing any content, so it is not world-readable while secrets are being written.
+
+The final success summary does not print the master password value. To retrieve it deliberately on the server, read it from the protected config file:
+```
+sudo grep '^admin_passwd = ' /etc/${OE_CONFIG}.conf
+```
+
+The installer validates operator-editable scalar values before running package installation or file writes. Boolean flags must be `True` or `False`, ports must be numeric and within `1-65535`, identifiers such as `OE_USER` and `OE_CONFIG` may only contain letters, numbers, underscores, and dashes, and custom/enterprise addon paths must be absolute managed paths outside critical system roots such as `/`, `/etc`, `/usr`, `/var`, `/home`, `/root`, and `/opt`.
+
+Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
+
+PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
+
+Runtime artifacts are written idempotently where possible. The log directory is created with `install -d` so reruns can reuse it safely, and `start.sh` is overwritten in one pass instead of appended to on every run.
+
+Nginx site activation is rerun-safe: the generated site symlink is updated with `ln -sf`, and removal of the default site uses `rm -f` so the step does not fail if the default site was already removed.
+
+Fallback wkhtmltopdf binary links are also rerun-safe. If `/usr/local/bin/wkhtmltopdf` or `/usr/local/bin/wkhtmltoimage` exists but is not on `PATH`, the installer updates explicit `/usr/bin/...` symlinks with `ln -sf` instead of failing on reruns.
+
+Odoo source checkout is resumable. If `${OE_HOME_EXT}` is already a Git checkout, the installer fetches, checks out, and fast-forwards the configured `${OE_VERSION}` as `${OE_USER}` instead of running a second `git clone`. If the target path exists but is not a Git checkout, the installer stops with a clear error instead of overwriting unknown data.
+
+Enterprise addons checkout follows the same resumable pattern. If `${ENTERPRISE_ADDONS_PATH}` is already a Git checkout, the installer updates it in place as `${OE_USER}`; if the path exists but is not a Git checkout, the installer aborts instead of deleting or replacing existing data.
+
+When Nginx is enabled, the installer sets `proxy_mode = True` idempotently. Existing `proxy_mode` entries are removed before the value is appended, so repeated runs do not duplicate the option in `/etc/${OE_CONFIG}.conf`.
 
 ## Custom addons
 
