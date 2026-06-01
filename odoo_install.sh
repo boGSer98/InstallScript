@@ -53,6 +53,8 @@ ENABLE_SSL="True"
 ADMIN_EMAIL="odoo@example.com"
 # Timeout for long-running package, network, and VCS commands.
 COMMAND_TIMEOUT_SECONDS="1800"
+# Timeout for PostgreSQL readiness probes after service start.
+POSTGRES_READY_TIMEOUT_SECONDS="120"
 
 run_with_timeout() {
   if command -v timeout >/dev/null 2>&1; then
@@ -60,6 +62,18 @@ run_with_timeout() {
   else
     "$@"
   fi
+}
+
+wait_for_postgresql() {
+  local elapsed=0
+  while ! sudo -u postgres pg_isready >/dev/null 2>&1; do
+    if [ "$elapsed" -ge "$POSTGRES_READY_TIMEOUT_SECONDS" ]; then
+      echo "PostgreSQL did not become ready within ${POSTGRES_READY_TIMEOUT_SECONDS}s" >&2
+      return 1
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
 }
 
 # Helper: pip install with optional --break-system-packages (Ubuntu 24.04 / PEP 668)
@@ -273,7 +287,7 @@ if [ "$INSTALL_POSTGRESQL_SIXTEEN" = "True" ]; then
       # pgvector is only needed for Enterprise AI features
       run_with_timeout sudo apt-get install -y postgresql-16-pgvector
       # Wait for PostgreSQL to become available
-      until sudo -u postgres pg_isready >/dev/null 2>&1; do sleep 1; done
+      wait_for_postgresql
       # Create vector extension using a heredoc to avoid any quoting issues
       sudo -u postgres psql -v ON_ERROR_STOP=1 -d template1 <<'SQL'
 CREATE EXTENSION IF NOT EXISTS vector;

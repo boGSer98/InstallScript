@@ -65,6 +65,8 @@ The installer validates operator-editable scalar values before running package i
 
 Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
 
+PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
+
 ## Custom addons
 
 By default the installer creates and uses:

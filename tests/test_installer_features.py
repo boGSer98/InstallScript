@@ -73,6 +73,14 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
 
+    def test_postgresql_readiness_wait_is_bounded(self):
+        self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
+        self.assertIn("wait_for_postgresql()", UBUNTU_SCRIPT)
+        self.assertIn('while ! sudo -u postgres pg_isready >/dev/null 2>&1; do', UBUNTU_SCRIPT)
+        self.assertIn('if [ "$elapsed" -ge "$POSTGRES_READY_TIMEOUT_SECONDS" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('PostgreSQL did not become ready within ${POSTGRES_READY_TIMEOUT_SECONDS}s', UBUNTU_SCRIPT)
+        self.assertNotIn('until sudo -u postgres pg_isready >/dev/null 2>&1; do sleep 1; done', UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
