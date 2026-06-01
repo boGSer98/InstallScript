@@ -69,6 +69,8 @@ PostgreSQL readiness probes are also bounded. After the installer starts Postgre
 
 Runtime artifacts are written idempotently where possible. The log directory is created with `install -d` so reruns can reuse it safely, and `start.sh` is overwritten in one pass instead of appended to on every run.
 
+Nginx site activation is rerun-safe: the generated site symlink is updated with `ln -sf`, and removal of the default site uses `rm -f` so the step does not fail if the default site was already removed.
+
 ## Custom addons
 
 By default the installer creates and uses:

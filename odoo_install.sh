@@ -599,8 +599,8 @@ server {
 EOF
 
   sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME
-  sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME
-  sudo rm /etc/nginx/sites-enabled/default
+  sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
+  sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
   sudo su root -c "printf 'proxy_mode = True\n' >> /etc/${OE_CONFIG}.conf"
   echo "Done! The Nginx server is up and running. Configuration can be found at /etc/nginx/sites-available/$WEBSITE_NAME"

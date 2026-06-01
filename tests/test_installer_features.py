@@ -88,6 +88,12 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('sudo chown "$OE_USER:$OE_USER" "$OE_HOME_EXT/start.sh"', UBUNTU_SCRIPT)
         self.assertNotIn('>> $OE_HOME_EXT/start.sh', UBUNTU_SCRIPT)
 
+    def test_nginx_site_activation_is_idempotent(self):
+        self.assertIn('sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn('sudo rm -f /etc/nginx/sites-enabled/default', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo ln -s /etc/nginx/sites-available/$WEBSITE_NAME /etc/nginx/sites-enabled/$WEBSITE_NAME', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo rm /etc/nginx/sites-enabled/default', UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
