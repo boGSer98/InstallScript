@@ -17,6 +17,8 @@
 OE_USER="odoo"
 OE_HOME="/$OE_USER"
 OE_HOME_EXT="/$OE_USER/${OE_USER}-server"
+CUSTOM_ADDONS_PATH="${OE_HOME}/custom/addons"
+ENTERPRISE_ADDONS_PATH="${OE_HOME}/enterprise/addons"
 # The default port where this Odoo instance will run under (provided you use the command -c in the terminal)
 # Set to true if you want to install it, false if you don't need it or have it already installed.
 INSTALL_WKHTMLTOPDF="True"
@@ -27,6 +29,9 @@ OE_PORT="8069"
 OE_VERSION="19.0"
 # Set this to True if you want to install the Odoo enterprise version!
 IS_ENTERPRISE="False"
+# Set this to True on an existing Community installation to clone/update Enterprise addons,
+# update addons_path, restart Odoo, and exit without rerunning the full installer.
+UPGRADE_TO_ENTERPRISE="False"
 # Installs postgreSQL V16 instead of defaults (e.g V12 for Ubuntu 20/22) - this improves performance
 INSTALL_POSTGRESQL_SIXTEEN="True"
 # Set this to True if you want to install Nginx!
@@ -52,6 +57,47 @@ pip_install() {
   else
     sudo -H pip3 install "$@"
   fi
+}
+
+install_enterprise_dependencies() {
+    pip_install psycopg2-binary pdfminer.six num2words ofxparse dbfread ebaysdk firebase_admin pyOpenSSL
+    sudo npm install -g less
+    sudo npm install -g less-plugin-clean-css
+}
+
+sync_enterprise_addons() {
+    echo -e "\n---- Synchronizing Enterprise addons under $ENTERPRISE_ADDONS_PATH ----"
+    sudo install -d -o "$OE_USER" -g "$OE_USER" "$OE_HOME/enterprise"
+
+    if [ -d "$ENTERPRISE_ADDONS_PATH/.git" ]; then
+        sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"
+        sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"
+        sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"
+    else
+        sudo rm -rf "$ENTERPRISE_ADDONS_PATH"
+        sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"
+    fi
+}
+
+write_enterprise_addons_path() {
+    sudo sed -i '/^addons_path=/d' "/etc/${OE_CONFIG}.conf"
+    sudo su root -c "printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
+}
+
+upgrade_to_enterprise() {
+    echo -e "\n---- Upgrade existing Community installation to Enterprise addons ----"
+    if [ ! -f "/etc/${OE_CONFIG}.conf" ]; then
+        echo "Cannot upgrade: /etc/${OE_CONFIG}.conf does not exist. Run the installer first."
+        exit 1
+    fi
+
+    install_enterprise_dependencies
+    sync_enterprise_addons
+    write_enterprise_addons_path
+    sudo service "$OE_CONFIG" restart || sudo /etc/init.d/"$OE_CONFIG" restart
+
+    echo "Enterprise addons are installed and addons_path keeps custom addons enabled."
+    exit 0
 }
 ##
 
@@ -99,6 +145,10 @@ wkhtml_create_symlinks_if_needed() {
 }
 
 detect_arch
+
+if [ "$UPGRADE_TO_ENTERPRISE" = "True" ]; then
+  upgrade_to_enterprise
+fi
 
 #--------------------------------------------------
 # Update Server
@@ -200,31 +250,13 @@ sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/odoo $
 
 if [ $IS_ENTERPRISE = "True" ]; then
     # Odoo Enterprise install!
-    pip_install psycopg2-binary pdfminer.six
-    sudo su $OE_USER -c "mkdir $OE_HOME/enterprise"
-    sudo su $OE_USER -c "mkdir $OE_HOME/enterprise/addons"
-
-    GITHUB_RESPONSE=$(sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/enterprise "$OE_HOME/enterprise/addons" 2>&1)
-    while [[ $GITHUB_RESPONSE == *"Authentication"* ]]; do
-        echo "------------------------WARNING------------------------------"
-        echo "Your authentication with Github has failed! Please try again."
-        printf "In order to clone and install the Odoo enterprise version you \nneed to be an offical Odoo partner and you need access to\nhttp://github.com/odoo/enterprise.\n"
-        echo "TIP: Press ctrl+c to stop this script."
-        echo "-------------------------------------------------------------"
-        echo " "
-        GITHUB_RESPONSE=$(sudo git clone --depth 1 --branch $OE_VERSION https://www.github.com/odoo/enterprise "$OE_HOME/enterprise/addons" 2>&1)
-    done
-
-    echo -e "\n---- Added Enterprise code under $OE_HOME/enterprise/addons ----"
-    echo -e "\n---- Installing Enterprise specific libraries ----"
-    pip_install num2words ofxparse dbfread ebaysdk firebase_admin pyOpenSSL
-    sudo npm install -g less
-    sudo npm install -g less-plugin-clean-css
+    install_enterprise_dependencies
+    sync_enterprise_addons
+    echo -e "\n---- Added Enterprise code under $ENTERPRISE_ADDONS_PATH ----"
 fi
 
 echo -e "\n---- Create custom module directory ----"
-sudo su $OE_USER -c "mkdir $OE_HOME/custom"
-sudo su $OE_USER -c "mkdir $OE_HOME/custom/addons"
+sudo install -d -o "$OE_USER" -g "$OE_USER" "$CUSTOM_ADDONS_PATH"
 
 echo -e "\n---- Setting permissions on home folder ----"
 sudo chown -R $OE_USER:$OE_USER $OE_HOME/*
@@ -248,9 +280,9 @@ fi
 sudo su root -c "printf 'logfile = /var/log/${OE_USER}/${OE_CONFIG}.log\n' >> /etc/${OE_CONFIG}.conf"
 
 if [ $IS_ENTERPRISE = "True" ]; then
-    sudo su root -c "printf 'addons_path=${OE_HOME}/enterprise/addons,${OE_HOME_EXT}/addons\n' >> /etc/${OE_CONFIG}.conf"
+    write_enterprise_addons_path
 else
-    sudo su root -c "printf 'addons_path=${OE_HOME_EXT}/addons,${OE_HOME}/custom/addons\n' >> /etc/${OE_CONFIG}.conf"
+    sudo su root -c "printf 'addons_path=${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
 fi
 sudo chown $OE_USER:$OE_USER /etc/${OE_CONFIG}.conf
 sudo chmod 640 /etc/${OE_CONFIG}.conf

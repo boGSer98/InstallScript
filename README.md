@@ -22,6 +22,8 @@ There are a few things you can configure, this is the most used list:<br/>
 ```OE_PORT``` is the port where Odoo should run on, for example 8069.<br/>
 ```OE_VERSION``` is the Odoo version to install, for example ```19.0``` for Odoo V19.<br/>
 ```IS_ENTERPRISE``` will install the Enterprise version on top of ```19.0``` if you set it to ```True```, set it to ```False``` if you want the community version of Odoo 19.<br/>
+```UPGRADE_TO_ENTERPRISE``` set to ```True``` on an existing Community installation to clone/update Enterprise addons, update the generated ```addons_path```, restart Odoo, and exit without rerunning the full installer.<br/>
+```CUSTOM_ADDONS_PATH``` is the custom addons directory. It defaults to ```/odoo/custom/addons``` and is always kept in ```addons_path```, including Enterprise installations and later Enterprise upgrades.<br/>
 ```OE_SUPERADMIN``` is the master password for this Odoo installation.<br/>
 ```INSTALL_NGINX``` is set to ```False``` by default. Set this to ```True``` if you want to install Nginx.<br/>
 ```WEBSITE_NAME``` Set the website name here for nginx configuration<br/>
@@ -46,6 +48,29 @@ The validator checks Bash syntax and runs ShellCheck when it is installed.
 ```
 sudo ./odoo_install.sh
 ```
+
+## Custom addons
+
+By default the installer creates and uses:
+```
+/odoo/custom/addons
+```
+
+You can change this with `CUSTOM_ADDONS_PATH` before running the installer. The path is written to `addons_path` for both Community and Enterprise installations, so your custom modules remain available if you later switch the same installation to Enterprise.
+
+## Upgrade an existing Community installation to Enterprise addons
+
+On an already installed Community server, set:
+```
+UPGRADE_TO_ENTERPRISE="True"
+```
+
+Then run the script again:
+```
+sudo ./odoo_install.sh
+```
+
+In this mode the script only installs/synchronizes Enterprise addons, updates `/etc/${OE_CONFIG}.conf` so `addons_path` contains Enterprise, Odoo standard addons, and `CUSTOM_ADDONS_PATH`, restarts Odoo, and exits without rerunning the full installer.
 
 ## Where should I host Odoo?
 There are plenty of great services that offer good hosting. The script has been tested with a few major players such as [Google Cloud](https://cloud.google.com/), [Hetzner](https://www.hetzner.com/), [Amazon AWS](https://aws.amazon.com/) and [DigitalOcean](https://www.digitalocean.com/products/droplets/).

@@ -20,3 +20,8 @@ if command -v shellcheck >/dev/null 2>&1; then
 else
   echo "ShellCheck is not installed; skipping ShellCheck." >&2
 fi
+
+if command -v python3 >/dev/null 2>&1 && [ -d tests ]; then
+  echo "Running Python feature tests..."
+  python3 -m unittest discover -s tests -p 'test_*.py'
+fi
