@@ -50,6 +50,10 @@ The validator checks Bash syntax and runs ShellCheck when it is installed.
 sudo ./odoo_install.sh
 ```
 
+## Security notes
+
+The generated Odoo configuration file at `/etc/${OE_CONFIG}.conf` contains the master password (`admin_passwd`). The installer creates it with owner `${OE_USER}:${OE_USER}` and mode `640` before writing any content, so it is not world-readable while secrets are being written.
+
 ## Custom addons
 
 By default the installer creates and uses:

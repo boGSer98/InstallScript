@@ -269,29 +269,34 @@ sudo chown -R $OE_USER:$OE_USER $OE_HOME/*
 
 echo -e "* Create server config file"
 
-
-sudo touch /etc/${OE_CONFIG}.conf
-echo -e "* Creating server config file"
-sudo su root -c "printf '[options] \n; This is the password that allows database operations:\n' >> /etc/${OE_CONFIG}.conf"
+sudo install -m 640 -o "$OE_USER" -g "$OE_USER" /dev/null "/etc/${OE_CONFIG}.conf"
 if [ $GENERATE_RANDOM_PASSWORD = "True" ]; then
     echo -e "* Generating random admin password"
     OE_SUPERADMIN=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
 fi
-sudo su root -c "printf 'admin_passwd = ${OE_SUPERADMIN}\n' >> /etc/${OE_CONFIG}.conf"
+
 if uses_http_port; then
-    sudo su root -c "printf 'http_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
+    ODOO_PORT_CONFIG="http_port = ${OE_PORT}"
 else
-    sudo su root -c "printf 'xmlrpc_port = ${OE_PORT}\n' >> /etc/${OE_CONFIG}.conf"
+    ODOO_PORT_CONFIG="xmlrpc_port = ${OE_PORT}"
 fi
-sudo su root -c "printf 'logfile = /var/log/${OE_USER}/${OE_CONFIG}.log\n' >> /etc/${OE_CONFIG}.conf"
 
 if [ $IS_ENTERPRISE = "True" ]; then
-    write_enterprise_addons_path
+    ODOO_ADDONS_PATH="${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
 else
-    sudo su root -c "printf 'addons_path=${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
+    ODOO_ADDONS_PATH="${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
 fi
-sudo chown $OE_USER:$OE_USER /etc/${OE_CONFIG}.conf
-sudo chmod 640 /etc/${OE_CONFIG}.conf
+
+cat <<EOF | sudo tee "/etc/${OE_CONFIG}.conf" >/dev/null
+[options]
+; This is the password that allows database operations:
+admin_passwd = ${OE_SUPERADMIN}
+${ODOO_PORT_CONFIG}
+logfile = /var/log/${OE_USER}/${OE_CONFIG}.log
+addons_path=${ODOO_ADDONS_PATH}
+EOF
+sudo chown "$OE_USER:$OE_USER" "/etc/${OE_CONFIG}.conf"
+sudo chmod 640 "/etc/${OE_CONFIG}.conf"
 
 echo -e "* Create startup file"
 sudo su root -c "echo '#!/bin/sh' >> $OE_HOME_EXT/start.sh"

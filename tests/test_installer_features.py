@@ -28,6 +28,15 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('if [ "$GRANT_ODOO_SUDO" = "True" ]; then', UBUNTU_SCRIPT)
         self.assertNotIn("sudo adduser $OE_USER sudo\n", UBUNTU_SCRIPT)
 
+    def test_odoo_config_file_is_created_with_restrictive_permissions(self):
+        self.assertIn(
+            'sudo install -m 640 -o "$OE_USER" -g "$OE_USER" /dev/null "/etc/${OE_CONFIG}.conf"',
+            UBUNTU_SCRIPT,
+        )
+        self.assertNotIn("sudo touch /etc/${OE_CONFIG}.conf", UBUNTU_SCRIPT)
+        self.assertIn("cat <<EOF | sudo tee \"/etc/${OE_CONFIG}.conf\" >/dev/null", UBUNTU_SCRIPT)
+        self.assertIn("admin_passwd = ${OE_SUPERADMIN}", UBUNTU_SCRIPT)
+
 
 if __name__ == "__main__":
     unittest.main()
