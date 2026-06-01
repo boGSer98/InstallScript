@@ -109,6 +109,16 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
         self.assertNotIn('run_with_timeout sudo git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/odoo "$OE_HOME_EXT/"', UBUNTU_SCRIPT)
 
+    def test_enterprise_addons_checkout_is_idempotent(self):
+        self.assertIn('sync_enterprise_addons() {', UBUNTU_SCRIPT)
+        self.assertIn('if [ -d "$ENTERPRISE_ADDONS_PATH/.git" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" fetch origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" checkout "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git -C "$ENTERPRISE_ADDONS_PATH" pull --ff-only origin "$OE_VERSION"', UBUNTU_SCRIPT)
+        self.assertIn('Cannot clone Enterprise addons: $ENTERPRISE_ADDONS_PATH already exists but is not a Git checkout.', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION" https://www.github.com/odoo/enterprise "$ENTERPRISE_ADDONS_PATH"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo rm -rf "$ENTERPRISE_ADDONS_PATH"', UBUNTU_SCRIPT)
+
     def test_proxy_mode_is_written_idempotently(self):
         self.assertIn('set_config_value() {', UBUNTU_SCRIPT)
         self.assertIn('set_config_value "proxy_mode" "True" "/etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)

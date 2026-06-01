@@ -75,6 +75,8 @@ Fallback wkhtmltopdf binary links are also rerun-safe. If `/usr/local/bin/wkhtml
 
 Odoo source checkout is resumable. If `${OE_HOME_EXT}` is already a Git checkout, the installer fetches, checks out, and fast-forwards the configured `${OE_VERSION}` as `${OE_USER}` instead of running a second `git clone`. If the target path exists but is not a Git checkout, the installer stops with a clear error instead of overwriting unknown data.
 
+Enterprise addons checkout follows the same resumable pattern. If `${ENTERPRISE_ADDONS_PATH}` is already a Git checkout, the installer updates it in place as `${OE_USER}`; if the path exists but is not a Git checkout, the installer aborts instead of deleting or replacing existing data.
+
 When Nginx is enabled, the installer sets `proxy_mode = True` idempotently. Existing `proxy_mode` entries are removed before the value is appended, so repeated runs do not duplicate the option in `/etc/${OE_CONFIG}.conf`.
 
 ## Custom addons
