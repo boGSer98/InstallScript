@@ -53,6 +53,8 @@ ENABLE_SSL="True"
 ADMIN_EMAIL="odoo@example.com"
 # Timeout for long-running package, network, and VCS commands.
 COMMAND_TIMEOUT_SECONDS="1800"
+# Timeout for apt/dpkg lock waits when another package manager process is active.
+APT_LOCK_TIMEOUT_SECONDS="300"
 # Timeout for PostgreSQL readiness probes after service start.
 POSTGRES_READY_TIMEOUT_SECONDS="120"
 
@@ -70,6 +72,7 @@ apt_get() {
     APT_LISTCHANGES_FRONTEND=none \
     NEEDRESTART_MODE=a \
     apt-get \
+    -o DPkg::Lock::Timeout="$APT_LOCK_TIMEOUT_SECONDS" \
     -o Dpkg::Options::=--force-confdef \
     -o Dpkg::Options::=--force-confold \
     "$@"
