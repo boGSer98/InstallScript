@@ -64,6 +64,17 @@ run_with_timeout() {
   fi
 }
 
+apt_get() {
+  run_with_timeout sudo env \
+    DEBIAN_FRONTEND=noninteractive \
+    APT_LISTCHANGES_FRONTEND=none \
+    NEEDRESTART_MODE=a \
+    apt-get \
+    -o Dpkg::Options::=--force-confdef \
+    -o Dpkg::Options::=--force-confold \
+    "$@"
+}
+
 wait_for_postgresql() {
   local elapsed=0
   while ! sudo -u postgres pg_isready >/dev/null 2>&1; do
@@ -261,8 +272,8 @@ uses_http_port() {
 }
 
 install_wkhtmltopdf_from_ubuntu() {
-  run_with_timeout sudo apt-get update -y
-  if run_with_timeout sudo apt-get install -y wkhtmltopdf; then
+  apt_get update -y
+  if apt_get install -y wkhtmltopdf; then
     echo "wkhtmltopdf installed from Ubuntu repositories ($ARCH_DEB)."
     return 0
   fi
@@ -294,9 +305,9 @@ echo -e "\n---- Update Server ----"
 # sudo add-apt-repository universe
 # libpng12-0 dependency for wkhtmltopdf for older Ubuntu versions
 # sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ xenial main"
-run_with_timeout sudo apt-get update -y
-run_with_timeout sudo apt-get upgrade -y
-run_with_timeout sudo apt-get install -y libpq-dev
+apt_get update -y
+apt_get upgrade -y
+apt_get install -y libpq-dev
 
 #--------------------------------------------------
 # Install PostgreSQL Server
@@ -306,13 +317,13 @@ if [ "$INSTALL_POSTGRESQL_SIXTEEN" = "True" ]; then
     echo -e "\n---- Installing postgreSQL V16 due to the user it's choise ----"
     run_with_timeout sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
     sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-    run_with_timeout sudo apt-get update -y
-    run_with_timeout sudo apt-get install -y postgresql-16
+    apt_get update -y
+    apt_get install -y postgresql-16
     if [ "$IS_ENTERPRISE" = "True" ]; then
       # Ensure PostgreSQL is running before pgvector setup (Ubuntu 24.04 uses systemd)
       sudo systemctl start postgresql || true
       # pgvector is only needed for Enterprise AI features
-      run_with_timeout sudo apt-get install -y postgresql-16-pgvector
+      apt_get install -y postgresql-16-pgvector
       # Wait for PostgreSQL to become available
       wait_for_postgresql
       # Create vector extension using a heredoc to avoid any quoting issues
@@ -322,7 +333,7 @@ SQL
     fi
 else
     echo -e "\n---- Installing the default postgreSQL version based on Linux version ----"
-    run_with_timeout sudo apt-get install postgresql postgresql-server-dev-all -y
+    apt_get install postgresql postgresql-server-dev-all -y
 fi
 
 echo -e "\n---- Creating the ODOO PostgreSQL User  ----"
@@ -332,8 +343,8 @@ sudo su - postgres -c "createuser -s $OE_USER" 2> /dev/null || true
 # Install Dependencies
 #--------------------------------------------------
 echo -e "\n--- Installing Python 3 + pip3 --"
-run_with_timeout sudo apt-get install -y python3 python3-pip
-run_with_timeout sudo apt-get install git python3-cffi build-essential wget python3-dev python3-venv python3-wheel libxslt-dev libzip-dev libldap2-dev libsasl2-dev python3-setuptools node-less libpng-dev libjpeg-dev gdebi -y
+apt_get install -y python3 python3-pip
+apt_get install git python3-cffi build-essential wget python3-dev python3-venv python3-wheel libxslt-dev libzip-dev libldap2-dev libsasl2-dev python3-setuptools node-less libpng-dev libjpeg-dev gdebi -y
 
 echo -e "\n---- Install python packages/requirements ----"
 pip_install -r https://github.com/odoo/odoo/raw/${OE_VERSION}/requirements.txt
@@ -342,7 +353,7 @@ pip_install -r https://github.com/odoo/odoo/raw/${OE_VERSION}/requirements.txt
 pip_install phonenumbers
 
 echo -e "\n---- Installing nodeJS NPM and rtlcss for LTR support ----"
-run_with_timeout sudo apt-get install nodejs npm -y
+apt_get install nodejs npm -y
 run_with_timeout sudo npm install -g rtlcss
 
 #--------------------------------------------------
@@ -523,7 +534,7 @@ sudo update-rc.d $OE_CONFIG defaults
 #--------------------------------------------------
 if [ $INSTALL_NGINX = "True" ]; then
   echo -e "\n---- Installing and setting up Nginx ----"
-  run_with_timeout sudo apt-get install -y nginx
+  apt_get install -y nginx
   cat <<EOF > ~/odoo
 upstream odoo {
   server 127.0.0.1:$OE_PORT;
@@ -640,12 +651,12 @@ fi
 #--------------------------------------------------
 
 if [ $INSTALL_NGINX = "True" ] && [ $ENABLE_SSL = "True" ] && [ $ADMIN_EMAIL != "odoo@example.com" ]  && [ $WEBSITE_NAME != "_" ];then
-  run_with_timeout sudo apt-get update -y
-  run_with_timeout sudo apt-get install -y snapd
+  apt_get update -y
+  apt_get install -y snapd
   run_with_timeout sudo snap install core
   run_with_timeout sudo snap refresh core
   run_with_timeout sudo snap install --classic certbot
-  run_with_timeout sudo apt-get install python3-certbot-nginx -y
+  apt_get install python3-certbot-nginx -y
   sudo certbot --nginx -d $WEBSITE_NAME --noninteractive --agree-tos --email $ADMIN_EMAIL --redirect
   sudo service nginx reload
   echo "SSL/HTTPS is enabled!"
