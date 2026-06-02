@@ -65,6 +65,8 @@ The installer validates operator-editable scalar values before running package i
 
 Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
 
+Apt/dpkg lock waits are bounded separately with `APT_LOCK_TIMEOUT_SECONDS="300"`. This allows the installer to wait briefly for unattended upgrades or other package manager processes, but still fail clearly instead of hanging indefinitely when the lock never becomes available.
+
 PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
 
 Runtime artifacts are written idempotently where possible. The log directory is created with `install -d` so reruns can reuse it safely, and `start.sh` is overwritten in one pass instead of appended to on every run.
