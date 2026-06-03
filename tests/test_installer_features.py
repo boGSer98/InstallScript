@@ -78,6 +78,8 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo certbot --nginx -d "$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo certbot --nginx -d $WEBSITE_NAME', UBUNTU_SCRIPT)
 
     def test_apt_runs_noninteractively_to_avoid_package_trigger_hangs(self):
         self.assertIn('apt_get() {', UBUNTU_SCRIPT)
