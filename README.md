@@ -31,7 +31,7 @@ There are a few things you can configure, this is the most used list:<br/>
 ```OE_SUPERADMIN``` is the master password for this Odoo installation.<br/>
 ```INSTALL_NGINX``` is set to ```False``` by default. Set this to ```True``` if you want to install Nginx.<br/>
 ```GRANT_ODOO_SUDO``` is set to ```False``` by default. The Odoo service user normally does not need sudo privileges; only set this to ```True``` for special custom workflows that explicitly require it.<br/>
-```WEBSITE_NAME``` Set the website name here for nginx configuration<br/>
+```WEBSITE_NAME``` Set the website name here for nginx configuration. Use `_` to keep the placeholder, or a DNS-style name containing only letters, numbers, dots, and dashes.<br/>
 ```ENABLE_SSL``` Set this to ```True``` to install [certbot](https://github.com/certbot/certbot) and configure nginx with https using a free Let's Encrypted certificate<br/>
 ```ADMIN_EMAIL``` Email is needed to register for Let's Encrypt registration. Replace the default placeholder with an email of your organisation.<br/>
 ```INSTALL_NGINX``` and ```ENABLE_SSL``` must be set to ```True``` and the placeholder in ```ADMIN_EMAIL``` must be replaced with a valid email address for certbot installation<br/>
@@ -63,7 +63,7 @@ The final success summary does not print the master password value. To retrieve 
 sudo grep '^admin_passwd = ' /etc/${OE_CONFIG}.conf
 ```
 
-The installer validates operator-editable scalar values before running package installation or file writes. Boolean flags must be `True` or `False`, ports must be numeric and within `1-65535`, identifiers such as `OE_USER` and `OE_CONFIG` may only contain letters, numbers, underscores, and dashes, and custom/enterprise addon paths must be absolute managed paths outside critical system roots such as `/`, `/etc`, `/usr`, `/var`, `/home`, `/root`, and `/opt`.
+The installer validates operator-editable scalar values before running package installation or file writes. Boolean flags must be `True` or `False`, ports must be numeric and within `1-65535`, identifiers such as `OE_USER` and `OE_CONFIG` may only contain letters, numbers, underscores, and dashes, `WEBSITE_NAME` must be `_` or a DNS-style name with letters, numbers, dots, and dashes, and custom/enterprise addon paths must be absolute managed paths outside critical system roots such as `/`, `/etc`, `/usr`, `/var`, `/home`, `/root`, and `/opt`.
 
 Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
 

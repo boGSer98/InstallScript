@@ -57,6 +57,14 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('fail_config "$name" "refusing dangerous path"', UBUNTU_SCRIPT)
         self.assertIn('detect_arch\nvalidate_config', UBUNTU_SCRIPT)
 
+    def test_nginx_website_name_is_validated_before_file_paths_are_used(self):
+        self.assertIn('validate_website_name "WEBSITE_NAME" "$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn('validate_website_name() {', UBUNTU_SCRIPT)
+        self.assertIn('""|*[!a-zA-Z0-9.-]*|.*|*..*|*.)', UBUNTU_SCRIPT)
+        self.assertIn('fail_config "$name" "use a DNS name with letters, numbers, dots, and dashes"', UBUNTU_SCRIPT)
+        self.assertIn('sudo mv ~/odoo "/etc/nginx/sites-available/$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME', UBUNTU_SCRIPT)
+
     def test_nginx_config_supports_odoo_websocket_and_proxy_mode(self):
         self.assertIn("map \\$http_upgrade \\$connection_upgrade", UBUNTU_SCRIPT)
         self.assertIn("upstream odoo {", UBUNTU_SCRIPT)
