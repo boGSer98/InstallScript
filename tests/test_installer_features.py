@@ -147,6 +147,20 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('printf \'%s = %s\\n\' "$key" "$value" | sudo tee -a "$config_file" >/dev/null', UBUNTU_SCRIPT)
         self.assertNotIn('sudo su root -c "printf \'proxy_mode = True\\n\' >> /etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
 
+    def test_database_is_utf8_created_and_base_initialized_before_service_start(self):
+        self.assertIn('INITIALIZE_ODOO_DATABASE="True"', UBUNTU_SCRIPT)
+        self.assertIn('ODOO_DATABASE_NAME="${OE_USER}"', UBUNTU_SCRIPT)
+        self.assertIn('validate_identifier "ODOO_DATABASE_NAME" "$ODOO_DATABASE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn('initialize_odoo_database() {', UBUNTU_SCRIPT)
+        self.assertIn('createdb -O "$OE_USER" --encoding=UTF8 --locale=C.UTF-8 --template=template0 "$ODOO_DATABASE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn("SELECT pg_encoding_to_char(encoding) FROM pg_database WHERE datname='${ODOO_DATABASE_NAME}'", UBUNTU_SCRIPT)
+        self.assertIn("SELECT to_regclass('public.ir_module_module')", UBUNTU_SCRIPT)
+        self.assertIn('-i base', UBUNTU_SCRIPT)
+        self.assertIn('--without-demo=all', UBUNTU_SCRIPT)
+        self.assertIn('--stop-after-init', UBUNTU_SCRIPT)
+        self.assertIn('db_name = ${ODOO_DATABASE_NAME}', UBUNTU_SCRIPT)
+        self.assertLess(UBUNTU_SCRIPT.rindex('initialize_odoo_database'), UBUNTU_SCRIPT.index('sudo su root -c "/etc/init.d/$OE_CONFIG start"'))
+
 
 if __name__ == "__main__":
     unittest.main()
