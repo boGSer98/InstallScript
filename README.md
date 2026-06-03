@@ -69,6 +69,8 @@ Long-running package, network, and Git commands are wrapped with `run_with_timeo
 
 Apt/dpkg lock waits are bounded separately with `APT_LOCK_TIMEOUT_SECONDS="300"`. This allows the installer to wait briefly for unattended upgrades or other package manager processes, but still fail clearly instead of hanging indefinitely when the lock never becomes available.
 
+Certbot execution is also bounded by `run_with_timeout`, so non-interactive SSL setup fails clearly if certificate issuance or validation hangs longer than `COMMAND_TIMEOUT_SECONDS`.
+
 PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup or database initialization, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
 
 By default the installer creates a UTF8 PostgreSQL database named by `ODOO_DATABASE_NAME` and initializes Odoo's `base` module with `--without-demo=all --stop-after-init` before starting the long-running service. If an existing database is not UTF8 and already contains Odoo tables, the installer aborts and requires manual migration instead of risking data loss.
