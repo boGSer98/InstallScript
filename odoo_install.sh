@@ -57,6 +57,9 @@ ENABLE_SSL="True"
 ADMIN_EMAIL="odoo@example.com"
 # Timeout for long-running package, network, and VCS commands.
 COMMAND_TIMEOUT_SECONDS="1800"
+# Set to "True" to run a full apt upgrade before installing dependencies.
+# Default is False because full upgrades can spend a long time in package triggers such as man-db.
+RUN_APT_UPGRADE="False"
 # Timeout for apt/dpkg lock waits when another package manager process is active.
 APT_LOCK_TIMEOUT_SECONDS="300"
 # Timeout for PostgreSQL readiness probes after service start.
@@ -189,6 +192,7 @@ validate_config() {
     validate_boolean "GRANT_ODOO_SUDO" "$GRANT_ODOO_SUDO"
     validate_boolean "GENERATE_RANDOM_PASSWORD" "$GENERATE_RANDOM_PASSWORD"
     validate_boolean "ENABLE_SSL" "$ENABLE_SSL"
+    validate_boolean "RUN_APT_UPGRADE" "$RUN_APT_UPGRADE"
     validate_port "OE_PORT" "$OE_PORT"
     validate_port "LONGPOLLING_PORT" "$LONGPOLLING_PORT"
     require_no_newline "OE_VERSION" "$OE_VERSION"
@@ -369,7 +373,11 @@ echo -e "\n---- Update Server ----"
 # libpng12-0 dependency for wkhtmltopdf for older Ubuntu versions
 # sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ xenial main"
 apt_get update -y
-apt_get upgrade -y
+if [ "$RUN_APT_UPGRADE" = "True" ]; then
+  apt_get upgrade -y
+else
+  echo "Skipping full apt upgrade (RUN_APT_UPGRADE=False) to avoid long package triggers such as man-db."
+fi
 apt_get install -y libpq-dev
 
 #--------------------------------------------------

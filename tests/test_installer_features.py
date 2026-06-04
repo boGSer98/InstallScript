@@ -105,6 +105,13 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('-o DPkg::Lock::Timeout="$APT_LOCK_TIMEOUT_SECONDS"', UBUNTU_SCRIPT)
         self.assertNotIn('while sudo fuser /var/lib/dpkg/lock', UBUNTU_SCRIPT)
 
+    def test_full_apt_upgrade_is_opt_in_to_avoid_man_db_trigger_hangs(self):
+        self.assertIn('RUN_APT_UPGRADE="False"', UBUNTU_SCRIPT)
+        self.assertIn('validate_boolean "RUN_APT_UPGRADE" "$RUN_APT_UPGRADE"', UBUNTU_SCRIPT)
+        self.assertIn('if [ "$RUN_APT_UPGRADE" = "True" ]; then', UBUNTU_SCRIPT)
+        self.assertIn('apt_get upgrade -y', UBUNTU_SCRIPT)
+        self.assertNotIn('\napt_get upgrade -y\napt_get install -y libpq-dev', UBUNTU_SCRIPT)
+
     def test_postgresql_readiness_wait_is_bounded(self):
         self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
         self.assertIn("wait_for_postgresql()", UBUNTU_SCRIPT)
