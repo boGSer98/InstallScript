@@ -147,6 +147,19 @@ validate_port() {
     fi
 }
 
+validate_website_name() {
+    local name="$1"
+    local value="$2"
+    require_no_newline "$name" "$value"
+
+    case "$value" in
+        "_") return 0 ;;
+        ""|*[!a-zA-Z0-9.-]*|.*|*..*|*.)
+            fail_config "$name" "use a DNS name with letters, numbers, dots, and dashes"
+            ;;
+    esac
+}
+
 validate_managed_path() {
     local name="$1"
     local value="$2"
@@ -180,7 +193,7 @@ validate_config() {
     validate_port "LONGPOLLING_PORT" "$LONGPOLLING_PORT"
     require_no_newline "OE_VERSION" "$OE_VERSION"
     require_no_newline "OE_SUPERADMIN" "$OE_SUPERADMIN"
-    require_no_newline "WEBSITE_NAME" "$WEBSITE_NAME"
+    validate_website_name "WEBSITE_NAME" "$WEBSITE_NAME"
     require_no_newline "ADMIN_EMAIL" "$ADMIN_EMAIL"
     validate_identifier "ODOO_DATABASE_NAME" "$ODOO_DATABASE_NAME"
     validate_managed_path "CUSTOM_ADDONS_PATH" "$CUSTOM_ADDONS_PATH"
@@ -687,7 +700,7 @@ server {
 }
 EOF
 
-  sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME
+  sudo mv ~/odoo "/etc/nginx/sites-available/$WEBSITE_NAME"
   sudo ln -sf "/etc/nginx/sites-available/$WEBSITE_NAME" "/etc/nginx/sites-enabled/$WEBSITE_NAME"
   sudo rm -f /etc/nginx/sites-enabled/default
   sudo service nginx reload
