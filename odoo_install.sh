@@ -32,6 +32,10 @@ IS_ENTERPRISE="False"
 # Set this to True on an existing Community installation to clone/update Enterprise addons,
 # update addons_path, restart Odoo, and exit without rerunning the full installer.
 UPGRADE_TO_ENTERPRISE="False"
+# Set this to True to create a UTF8 database and initialize Odoo's base module before the service starts.
+INITIALIZE_ODOO_DATABASE="True"
+# PostgreSQL database name used when INITIALIZE_ODOO_DATABASE is enabled.
+ODOO_DATABASE_NAME="${OE_USER}"
 # Installs postgreSQL V16 instead of defaults (e.g V12 for Ubuntu 20/22) - this improves performance
 INSTALL_POSTGRESQL_SIXTEEN="True"
 # Set this to True if you want to install Nginx!
@@ -166,6 +170,7 @@ validate_config() {
     validate_boolean "INSTALL_WKHTMLTOPDF" "$INSTALL_WKHTMLTOPDF"
     validate_boolean "IS_ENTERPRISE" "$IS_ENTERPRISE"
     validate_boolean "UPGRADE_TO_ENTERPRISE" "$UPGRADE_TO_ENTERPRISE"
+    validate_boolean "INITIALIZE_ODOO_DATABASE" "$INITIALIZE_ODOO_DATABASE"
     validate_boolean "INSTALL_POSTGRESQL_SIXTEEN" "$INSTALL_POSTGRESQL_SIXTEEN"
     validate_boolean "INSTALL_NGINX" "$INSTALL_NGINX"
     validate_boolean "GRANT_ODOO_SUDO" "$GRANT_ODOO_SUDO"
@@ -177,6 +182,7 @@ validate_config() {
     require_no_newline "OE_SUPERADMIN" "$OE_SUPERADMIN"
     require_no_newline "WEBSITE_NAME" "$WEBSITE_NAME"
     require_no_newline "ADMIN_EMAIL" "$ADMIN_EMAIL"
+    validate_identifier "ODOO_DATABASE_NAME" "$ODOO_DATABASE_NAME"
     validate_managed_path "CUSTOM_ADDONS_PATH" "$CUSTOM_ADDONS_PATH"
     validate_managed_path "ENTERPRISE_ADDONS_PATH" "$ENTERPRISE_ADDONS_PATH"
 }
@@ -231,6 +237,47 @@ set_config_value() {
 write_enterprise_addons_path() {
     sudo sed -i '/^addons_path=/d' "/etc/${OE_CONFIG}.conf"
     sudo su root -c "printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
+}
+
+initialize_odoo_database() {
+    if [ "$INITIALIZE_ODOO_DATABASE" != "True" ]; then
+        echo "Odoo database initialization is disabled."
+        return 0
+    fi
+
+    echo -e "\n---- Initialize Odoo database $ODOO_DATABASE_NAME ----"
+    sudo systemctl start postgresql || true
+    wait_for_postgresql
+
+    if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${ODOO_DATABASE_NAME}'" | grep -q 1; then
+        sudo -u postgres createdb -O "$OE_USER" --encoding=UTF8 --locale=C.UTF-8 --template=template0 "$ODOO_DATABASE_NAME"
+    fi
+
+    local db_encoding
+    db_encoding=$(sudo -u postgres psql -tAc "SELECT pg_encoding_to_char(encoding) FROM pg_database WHERE datname='${ODOO_DATABASE_NAME}'" | tr -d '[:space:]')
+    if [ "$db_encoding" != "UTF8" ]; then
+        local odoo_table
+        odoo_table=$(sudo -u postgres psql -d "$ODOO_DATABASE_NAME" -tAc "SELECT to_regclass('public.ir_module_module')" | tr -d '[:space:]' || true)
+        if [ -n "$odoo_table" ]; then
+            echo "Database $ODOO_DATABASE_NAME is initialized but uses $db_encoding encoding. Manual migration to UTF8 is required." >&2
+            exit 1
+        fi
+        echo "Recreating uninitialized database $ODOO_DATABASE_NAME with UTF8 encoding."
+        sudo -u postgres dropdb "$ODOO_DATABASE_NAME"
+        sudo -u postgres createdb -O "$OE_USER" --encoding=UTF8 --locale=C.UTF-8 --template=template0 "$ODOO_DATABASE_NAME"
+    fi
+
+    if sudo -u postgres psql -d "$ODOO_DATABASE_NAME" -tAc "SELECT to_regclass('public.ir_module_module')" | grep -q ir_module_module; then
+        echo "Odoo database $ODOO_DATABASE_NAME is already initialized."
+        return 0
+    fi
+
+    run_with_timeout sudo -u "$OE_USER" "$OE_HOME_EXT/odoo-bin" \
+        -c "/etc/${OE_CONFIG}.conf" \
+        -d "$ODOO_DATABASE_NAME" \
+        -i base \
+        --without-demo=all \
+        --stop-after-init
 }
 
 upgrade_to_enterprise() {
@@ -439,6 +486,7 @@ cat <<EOF | sudo tee "/etc/${OE_CONFIG}.conf" >/dev/null
 ; This is the password that allows database operations:
 admin_passwd = ${OE_SUPERADMIN}
 ${ODOO_PORT_CONFIG}
+db_name = ${ODOO_DATABASE_NAME}
 logfile = /var/log/${OE_USER}/${OE_CONFIG}.log
 addons_path=${ODOO_ADDONS_PATH}
 EOF
@@ -673,6 +721,8 @@ else
       echo "Website name is set as _. Cannot obtain SSL Certificate for _. You should use real website address."
   fi
 fi
+
+initialize_odoo_database
 
 echo -e "* Starting Odoo Service"
 sudo su root -c "/etc/init.d/$OE_CONFIG start"

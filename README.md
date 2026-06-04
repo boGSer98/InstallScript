@@ -25,6 +25,8 @@ There are a few things you can configure, this is the most used list:<br/>
 ```OE_VERSION``` is the Odoo version to install, for example ```19.0``` for Odoo V19.<br/>
 ```IS_ENTERPRISE``` will install the Enterprise version on top of ```19.0``` if you set it to ```True```, set it to ```False``` if you want the community version of Odoo 19.<br/>
 ```UPGRADE_TO_ENTERPRISE``` set to ```True``` on an existing Community installation to clone/update Enterprise addons, update the generated ```addons_path```, restart Odoo, and exit without rerunning the full installer.<br/>
+```INITIALIZE_ODOO_DATABASE``` set to ```True``` to create a UTF8 PostgreSQL database and initialize Odoo's ```base``` module before the service starts.<br/>
+```ODOO_DATABASE_NAME``` is the database name used when initialization is enabled. It defaults to the service user name.<br/>
 ```CUSTOM_ADDONS_PATH``` is the custom addons directory. It defaults to ```/odoo/custom/addons``` and is always kept in ```addons_path``` after Odoo's core ```odoo/addons``` and standard ```addons``` directories, including Enterprise installations and later Enterprise upgrades.<br/>
 ```OE_SUPERADMIN``` is the master password for this Odoo installation.<br/>
 ```INSTALL_NGINX``` is set to ```False``` by default. Set this to ```True``` if you want to install Nginx.<br/>
@@ -67,7 +69,9 @@ Long-running package, network, and Git commands are wrapped with `run_with_timeo
 
 Apt/dpkg lock waits are bounded separately with `APT_LOCK_TIMEOUT_SECONDS="300"`. This allows the installer to wait briefly for unattended upgrades or other package manager processes, but still fail clearly instead of hanging indefinitely when the lock never becomes available.
 
-PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
+PostgreSQL readiness probes are also bounded. After the installer starts PostgreSQL for Enterprise pgvector setup or database initialization, `wait_for_postgresql` gives `pg_isready` up to `POSTGRES_READY_TIMEOUT_SECONDS="120"` seconds before failing with a clear error instead of waiting forever.
+
+By default the installer creates a UTF8 PostgreSQL database named by `ODOO_DATABASE_NAME` and initializes Odoo's `base` module with `--without-demo=all --stop-after-init` before starting the long-running service. If an existing database is not UTF8 and already contains Odoo tables, the installer aborts and requires manual migration instead of risking data loss.
 
 Runtime artifacts are written idempotently where possible. The log directory is created with `install -d` so reruns can reuse it safely, and `start.sh` is overwritten in one pass instead of appended to on every run.
 
