@@ -27,7 +27,7 @@ There are a few things you can configure, this is the most used list:<br/>
 ```UPGRADE_TO_ENTERPRISE``` set to ```True``` on an existing Community installation to clone/update Enterprise addons, update the generated ```addons_path```, restart Odoo, and exit without rerunning the full installer.<br/>
 ```INITIALIZE_ODOO_DATABASE``` set to ```True``` to create a UTF8 PostgreSQL database and initialize Odoo's ```base``` module before the service starts.<br/>
 ```ODOO_DATABASE_NAME``` is the database name used when initialization is enabled. It defaults to the service user name.<br/>
-```CUSTOM_ADDONS_PATH``` is the custom addons directory. It defaults to ```/odoo/custom/addons``` and is always kept in ```addons_path``` after Odoo's core ```odoo/addons``` and standard ```addons``` directories, including Enterprise installations and later Enterprise upgrades.<br/>
+```CUSTOM_ADDONS_PATH``` is the custom addons directory. It defaults to ```/odoo/custom-addons``` and is always kept in ```addons_path``` after Odoo's core ```odoo/addons``` and standard ```addons``` directories, including Enterprise installations and later Enterprise upgrades.<br/>
 ```OE_SUPERADMIN``` is the master password for this Odoo installation.<br/>
 ```INSTALL_NGINX``` is set to ```False``` by default. Set this to ```True``` if you want to install Nginx.<br/>
 ```GRANT_ODOO_SUDO``` is set to ```False``` by default. The Odoo service user normally does not need sudo privileges; only set this to ```True``` for special custom workflows that explicitly require it.<br/>
@@ -91,7 +91,7 @@ When Nginx is enabled, the installer sets `proxy_mode = True` idempotently. Exis
 
 By default the installer creates and uses:
 ```
-/odoo/custom/addons
+/odoo/custom-addons
 ```
 
 You can change this with `CUSTOM_ADDONS_PATH` before running the installer. The path is written to `addons_path` for both Community and Enterprise installations, so your custom modules remain available if you later switch the same installation to Enterprise. The generated `addons_path` keeps both source checkout addon roots: `${OE_HOME_EXT}/odoo/addons` for Odoo core modules such as `base`, and `${OE_HOME_EXT}/addons` for standard addons.
