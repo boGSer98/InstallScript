@@ -708,7 +708,7 @@ if [ $INSTALL_NGINX = "True" ] && [ $ENABLE_SSL = "True" ] && [ $ADMIN_EMAIL != 
   run_with_timeout sudo snap refresh core
   run_with_timeout sudo snap install --classic certbot
   apt_get install python3-certbot-nginx -y
-  sudo certbot --nginx -d $WEBSITE_NAME --noninteractive --agree-tos --email $ADMIN_EMAIL --redirect
+  run_with_timeout sudo certbot --nginx -d "$WEBSITE_NAME" --noninteractive --agree-tos --email "$ADMIN_EMAIL" --redirect
   sudo service nginx reload
   echo "SSL/HTTPS is enabled!"
 else
