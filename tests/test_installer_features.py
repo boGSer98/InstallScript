@@ -7,20 +7,27 @@ UBUNTU_SCRIPT = (REPO_ROOT / "odoo_install.sh").read_text()
 
 class InstallerFeatureTests(unittest.TestCase):
     def test_custom_addons_path_is_configurable_and_used_in_addons_path(self):
-        self.assertIn('CUSTOM_ADDONS_PATH="${OE_HOME}/custom/addons"', UBUNTU_SCRIPT)
+        self.assertIn('CUSTOM_ADDONS_PATH="${OE_HOME}/custom-addons"', UBUNTU_SCRIPT)
+        self.assertNotIn('CUSTOM_ADDONS_PATH="${OE_HOME}/custom/addons"', UBUNTU_SCRIPT)
         self.assertIn('sudo install -d -o "$OE_USER" -g "$OE_USER" "$CUSTOM_ADDONS_PATH"', UBUNTU_SCRIPT)
         self.assertIn("${CUSTOM_ADDONS_PATH}", UBUNTU_SCRIPT)
 
+    def test_addons_path_includes_odoo_core_and_standard_addons(self):
+        community_path = "${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
+        enterprise_path = "${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
+        self.assertIn(community_path, UBUNTU_SCRIPT)
+        self.assertIn(enterprise_path, UBUNTU_SCRIPT)
+
     def test_enterprise_addons_path_keeps_custom_addons_available(self):
         self.assertIn('ENTERPRISE_ADDONS_PATH="${OE_HOME}/enterprise/addons"', UBUNTU_SCRIPT)
-        expected = "addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
+        expected = "addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
         self.assertIn(expected, UBUNTU_SCRIPT)
 
     def test_installer_supports_idempotent_enterprise_upgrade_mode(self):
         self.assertIn('UPGRADE_TO_ENTERPRISE="False"', UBUNTU_SCRIPT)
         self.assertIn("upgrade_to_enterprise()", UBUNTU_SCRIPT)
         self.assertIn("sed -i", UBUNTU_SCRIPT)
-        expected = "sudo su root -c \"printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\\n'"
+        expected = "sudo su root -c \"printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\\n'"
         self.assertIn(expected, UBUNTU_SCRIPT)
 
     def test_odoo_user_does_not_get_sudo_by_default(self):
@@ -51,6 +58,14 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('fail_config "$name" "refusing dangerous path"', UBUNTU_SCRIPT)
         self.assertIn('detect_arch\nvalidate_config', UBUNTU_SCRIPT)
 
+    def test_nginx_website_name_is_validated_before_file_paths_are_used(self):
+        self.assertIn('validate_website_name "WEBSITE_NAME" "$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn('validate_website_name() {', UBUNTU_SCRIPT)
+        self.assertIn('""|*[!a-zA-Z0-9.-]*|.*|*..*|*.)', UBUNTU_SCRIPT)
+        self.assertIn('fail_config "$name" "use a DNS name with letters, numbers, dots, and dashes"', UBUNTU_SCRIPT)
+        self.assertIn('sudo mv ~/odoo "/etc/nginx/sites-available/$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo mv ~/odoo /etc/nginx/sites-available/$WEBSITE_NAME', UBUNTU_SCRIPT)
+
     def test_nginx_config_supports_odoo_websocket_and_proxy_mode(self):
         self.assertIn("map \\$http_upgrade \\$connection_upgrade", UBUNTU_SCRIPT)
         self.assertIn("upstream odoo {", UBUNTU_SCRIPT)
@@ -72,6 +87,8 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
+        self.assertIn('run_with_timeout sudo certbot --nginx -d "$WEBSITE_NAME"', UBUNTU_SCRIPT)
+        self.assertNotIn('sudo certbot --nginx -d $WEBSITE_NAME', UBUNTU_SCRIPT)
 
     def test_apt_runs_noninteractively_to_avoid_package_trigger_hangs(self):
         self.assertIn('apt_get() {', UBUNTU_SCRIPT)
@@ -82,6 +99,11 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('-o Dpkg::Options::=--force-confold', UBUNTU_SCRIPT)
         self.assertNotIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
         self.assertNotIn('run_with_timeout sudo apt-get install -y', UBUNTU_SCRIPT)
+
+    def test_apt_waits_for_package_manager_locks_only_for_a_bounded_time(self):
+        self.assertIn('APT_LOCK_TIMEOUT_SECONDS="300"', UBUNTU_SCRIPT)
+        self.assertIn('-o DPkg::Lock::Timeout="$APT_LOCK_TIMEOUT_SECONDS"', UBUNTU_SCRIPT)
+        self.assertNotIn('while sudo fuser /var/lib/dpkg/lock', UBUNTU_SCRIPT)
 
     def test_postgresql_readiness_wait_is_bounded(self):
         self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
@@ -135,6 +157,20 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('sudo sed -i "/^${key} = /d;/^${key}=/d" "$config_file"', UBUNTU_SCRIPT)
         self.assertIn('printf \'%s = %s\\n\' "$key" "$value" | sudo tee -a "$config_file" >/dev/null', UBUNTU_SCRIPT)
         self.assertNotIn('sudo su root -c "printf \'proxy_mode = True\\n\' >> /etc/${OE_CONFIG}.conf"', UBUNTU_SCRIPT)
+
+    def test_database_is_utf8_created_and_base_initialized_before_service_start(self):
+        self.assertIn('INITIALIZE_ODOO_DATABASE="True"', UBUNTU_SCRIPT)
+        self.assertIn('ODOO_DATABASE_NAME="${OE_USER}"', UBUNTU_SCRIPT)
+        self.assertIn('validate_identifier "ODOO_DATABASE_NAME" "$ODOO_DATABASE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn('initialize_odoo_database() {', UBUNTU_SCRIPT)
+        self.assertIn('createdb -O "$OE_USER" --encoding=UTF8 --locale=C.UTF-8 --template=template0 "$ODOO_DATABASE_NAME"', UBUNTU_SCRIPT)
+        self.assertIn("SELECT pg_encoding_to_char(encoding) FROM pg_database WHERE datname='${ODOO_DATABASE_NAME}'", UBUNTU_SCRIPT)
+        self.assertIn("SELECT to_regclass('public.ir_module_module')", UBUNTU_SCRIPT)
+        self.assertIn('-i base', UBUNTU_SCRIPT)
+        self.assertIn('--without-demo=all', UBUNTU_SCRIPT)
+        self.assertIn('--stop-after-init', UBUNTU_SCRIPT)
+        self.assertIn('db_name = ${ODOO_DATABASE_NAME}', UBUNTU_SCRIPT)
+        self.assertLess(UBUNTU_SCRIPT.rindex('initialize_odoo_database'), UBUNTU_SCRIPT.index('sudo su root -c "/etc/init.d/$OE_CONFIG start"'))
 
 
 if __name__ == "__main__":
