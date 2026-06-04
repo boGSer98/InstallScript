@@ -28,6 +28,8 @@ There are a few things you can configure, this is the most used list:<br/>
 ```INITIALIZE_ODOO_DATABASE``` set to ```True``` to create a UTF8 PostgreSQL database and initialize Odoo's ```base``` module before the service starts.<br/>
 ```ODOO_DATABASE_NAME``` is the database name used when initialization is enabled. It defaults to the service user name.<br/>
 ```CUSTOM_ADDONS_PATH``` is the custom addons directory. It defaults to ```/odoo/custom-addons``` and is always kept in ```addons_path``` after Odoo's core ```odoo/addons``` and standard ```addons``` directories, including Enterprise installations and later Enterprise upgrades.<br/>
+```APT_LOCK_TIMEOUT_SECONDS``` limits apt/dpkg lock waits when another package manager process is active. Default: ```300``` seconds.<br/>
+```RUN_APT_UPGRADE``` controls whether the installer runs a full ```apt-get upgrade```. Default: ```False``` to avoid long package triggers such as ```man-db``` during unattended customer installs. Set to ```True``` only when you explicitly want the installer to upgrade all already-installed packages before installing Odoo dependencies.<br/>
 ```OE_SUPERADMIN``` is the master password for this Odoo installation.<br/>
 ```INSTALL_NGINX``` is set to ```False``` by default. Set this to ```True``` if you want to install Nginx.<br/>
 ```GRANT_ODOO_SUDO``` is set to ```False``` by default. The Odoo service user normally does not need sudo privileges; only set this to ```True``` for special custom workflows that explicitly require it.<br/>
@@ -68,6 +70,8 @@ The installer validates operator-editable scalar values before running package i
 Long-running package, network, and Git commands are wrapped with `run_with_timeout` and default to `COMMAND_TIMEOUT_SECONDS="1800"` (30 minutes). Adjust this variable before running the installer if a slow customer connection legitimately needs more time.
 
 Apt/dpkg lock waits are bounded separately with `APT_LOCK_TIMEOUT_SECONDS="300"`. This allows the installer to wait briefly for unattended upgrades or other package manager processes, but still fail clearly instead of hanging indefinitely when the lock never becomes available.
+
+The installer does not run a full `apt-get upgrade` by default (`RUN_APT_UPGRADE="False"`). It still runs `apt-get update` and installs the required dependencies, but avoids upgrading every already-installed package, which can spend a long time in dpkg triggers such as `man-db` on minimal servers. If you deliberately want a full OS package upgrade as part of the Odoo install, set `RUN_APT_UPGRADE="True"` before running the script.
 
 Certbot execution is also bounded by `run_with_timeout`, so non-interactive SSL setup fails clearly if certificate issuance or validation hangs longer than `COMMAND_TIMEOUT_SECONDS`.
 
