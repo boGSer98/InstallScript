@@ -7,7 +7,8 @@ UBUNTU_SCRIPT = (REPO_ROOT / "odoo_install.sh").read_text()
 
 class InstallerFeatureTests(unittest.TestCase):
     def test_custom_addons_path_is_configurable_and_used_in_addons_path(self):
-        self.assertIn('CUSTOM_ADDONS_PATH="${OE_HOME}/custom/addons"', UBUNTU_SCRIPT)
+        self.assertIn('CUSTOM_ADDONS_PATH="${OE_HOME}/custom-addons"', UBUNTU_SCRIPT)
+        self.assertNotIn('CUSTOM_ADDONS_PATH="${OE_HOME}/custom/addons"', UBUNTU_SCRIPT)
         self.assertIn('sudo install -d -o "$OE_USER" -g "$OE_USER" "$CUSTOM_ADDONS_PATH"', UBUNTU_SCRIPT)
         self.assertIn("${CUSTOM_ADDONS_PATH}", UBUNTU_SCRIPT)
 
