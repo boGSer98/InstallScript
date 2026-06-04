@@ -230,7 +230,7 @@ set_config_value() {
 
 write_enterprise_addons_path() {
     sudo sed -i '/^addons_path=/d' "/etc/${OE_CONFIG}.conf"
-    sudo su root -c "printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
+    sudo su root -c "printf 'addons_path=${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}\n' >> /etc/${OE_CONFIG}.conf"
 }
 
 upgrade_to_enterprise() {
@@ -429,9 +429,9 @@ else
 fi
 
 if [ $IS_ENTERPRISE = "True" ]; then
-    ODOO_ADDONS_PATH="${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
+    ODOO_ADDONS_PATH="${ENTERPRISE_ADDONS_PATH},${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
 else
-    ODOO_ADDONS_PATH="${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
+    ODOO_ADDONS_PATH="${OE_HOME_EXT}/odoo/addons,${OE_HOME_EXT}/addons,${CUSTOM_ADDONS_PATH}"
 fi
 
 cat <<EOF | sudo tee "/etc/${OE_CONFIG}.conf" >/dev/null
