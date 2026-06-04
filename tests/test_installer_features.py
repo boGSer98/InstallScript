@@ -83,6 +83,11 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertNotIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
         self.assertNotIn('run_with_timeout sudo apt-get install -y', UBUNTU_SCRIPT)
 
+    def test_apt_waits_for_package_manager_locks_only_for_a_bounded_time(self):
+        self.assertIn('APT_LOCK_TIMEOUT_SECONDS="300"', UBUNTU_SCRIPT)
+        self.assertIn('-o DPkg::Lock::Timeout="$APT_LOCK_TIMEOUT_SECONDS"', UBUNTU_SCRIPT)
+        self.assertNotIn('while sudo fuser /var/lib/dpkg/lock', UBUNTU_SCRIPT)
+
     def test_postgresql_readiness_wait_is_bounded(self):
         self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
         self.assertIn("wait_for_postgresql()", UBUNTU_SCRIPT)
