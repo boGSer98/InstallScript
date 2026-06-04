@@ -67,11 +67,21 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('COMMAND_TIMEOUT_SECONDS="1800"', UBUNTU_SCRIPT)
         self.assertIn("run_with_timeout()", UBUNTU_SCRIPT)
         self.assertIn('timeout "$COMMAND_TIMEOUT_SECONDS" "$@"', UBUNTU_SCRIPT)
-        self.assertIn('run_with_timeout sudo apt-get update -y', UBUNTU_SCRIPT)
-        self.assertIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
+        self.assertIn('apt_get update -y', UBUNTU_SCRIPT)
+        self.assertIn('apt_get upgrade -y', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
+
+    def test_apt_runs_noninteractively_to_avoid_package_trigger_hangs(self):
+        self.assertIn('apt_get() {', UBUNTU_SCRIPT)
+        self.assertIn('DEBIAN_FRONTEND=noninteractive', UBUNTU_SCRIPT)
+        self.assertIn('APT_LISTCHANGES_FRONTEND=none', UBUNTU_SCRIPT)
+        self.assertIn('NEEDRESTART_MODE=a', UBUNTU_SCRIPT)
+        self.assertIn('-o Dpkg::Options::=--force-confdef', UBUNTU_SCRIPT)
+        self.assertIn('-o Dpkg::Options::=--force-confold', UBUNTU_SCRIPT)
+        self.assertNotIn('run_with_timeout sudo apt-get upgrade -y', UBUNTU_SCRIPT)
+        self.assertNotIn('run_with_timeout sudo apt-get install -y', UBUNTU_SCRIPT)
 
     def test_postgresql_readiness_wait_is_bounded(self):
         self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
