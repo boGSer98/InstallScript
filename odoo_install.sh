@@ -57,9 +57,6 @@ ENABLE_SSL="True"
 ADMIN_EMAIL="odoo@example.com"
 # Timeout for long-running package, network, and VCS commands.
 COMMAND_TIMEOUT_SECONDS="1800"
-# Set to "True" to run a full apt upgrade before installing dependencies.
-# Default is False because full upgrades can spend a long time in package triggers such as man-db.
-RUN_APT_UPGRADE="False"
 # Timeout for apt/dpkg lock waits when another package manager process is active.
 APT_LOCK_TIMEOUT_SECONDS="300"
 # Timeout for PostgreSQL readiness probes after service start.
@@ -192,7 +189,6 @@ validate_config() {
     validate_boolean "GRANT_ODOO_SUDO" "$GRANT_ODOO_SUDO"
     validate_boolean "GENERATE_RANDOM_PASSWORD" "$GENERATE_RANDOM_PASSWORD"
     validate_boolean "ENABLE_SSL" "$ENABLE_SSL"
-    validate_boolean "RUN_APT_UPGRADE" "$RUN_APT_UPGRADE"
     validate_port "OE_PORT" "$OE_PORT"
     validate_port "LONGPOLLING_PORT" "$LONGPOLLING_PORT"
     require_no_newline "OE_VERSION" "$OE_VERSION"
@@ -339,7 +335,6 @@ uses_http_port() {
 }
 
 install_wkhtmltopdf_from_ubuntu() {
-  apt_get update -y
   if apt_get install -y wkhtmltopdf; then
     echo "wkhtmltopdf installed from Ubuntu repositories ($ARCH_DEB)."
     return 0
@@ -364,20 +359,6 @@ if [ "$UPGRADE_TO_ENTERPRISE" = "True" ]; then
   upgrade_to_enterprise
 fi
 
-#--------------------------------------------------
-# Update Server
-#--------------------------------------------------
-echo -e "\n---- Update Server ----"
-# universe package is for Ubuntu 18.x
-# sudo add-apt-repository universe
-# libpng12-0 dependency for wkhtmltopdf for older Ubuntu versions
-# sudo add-apt-repository "deb http://mirrors.kernel.org/ubuntu/ xenial main"
-apt_get update -y
-if [ "$RUN_APT_UPGRADE" = "True" ]; then
-  apt_get upgrade -y
-else
-  echo "Skipping full apt upgrade (RUN_APT_UPGRADE=False) to avoid long package triggers such as man-db."
-fi
 apt_get install -y libpq-dev
 
 #--------------------------------------------------
@@ -723,7 +704,6 @@ fi
 #--------------------------------------------------
 
 if [ $INSTALL_NGINX = "True" ] && [ $ENABLE_SSL = "True" ] && [ $ADMIN_EMAIL != "odoo@example.com" ]  && [ $WEBSITE_NAME != "_" ];then
-  apt_get update -y
   apt_get install -y snapd
   run_with_timeout sudo snap install core
   run_with_timeout sudo snap refresh core
