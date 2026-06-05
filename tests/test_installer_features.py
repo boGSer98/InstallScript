@@ -3,6 +3,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UBUNTU_SCRIPT = (REPO_ROOT / "odoo_install.sh").read_text()
+DEBIAN_SCRIPT = (REPO_ROOT / "odoo_install_debian.sh").read_text()
 
 
 class InstallerFeatureTests(unittest.TestCase):
@@ -82,8 +83,8 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('COMMAND_TIMEOUT_SECONDS="1800"', UBUNTU_SCRIPT)
         self.assertIn("run_with_timeout()", UBUNTU_SCRIPT)
         self.assertIn('timeout "$COMMAND_TIMEOUT_SECONDS" "$@"', UBUNTU_SCRIPT)
-        self.assertIn('apt_get update -y', UBUNTU_SCRIPT)
-        self.assertIn('apt_get upgrade -y', UBUNTU_SCRIPT)
+        self.assertEqual(UBUNTU_SCRIPT.count('apt_get update -y'), 1)
+        self.assertNotIn('apt_get upgrade -y', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo -u "$OE_USER" git clone --depth 1 --branch "$OE_VERSION"', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo npm install -g rtlcss', UBUNTU_SCRIPT)
         self.assertIn('run_with_timeout sudo snap install --classic certbot', UBUNTU_SCRIPT)
@@ -105,12 +106,20 @@ class InstallerFeatureTests(unittest.TestCase):
         self.assertIn('-o DPkg::Lock::Timeout="$APT_LOCK_TIMEOUT_SECONDS"', UBUNTU_SCRIPT)
         self.assertNotIn('while sudo fuser /var/lib/dpkg/lock', UBUNTU_SCRIPT)
 
-    def test_full_apt_upgrade_is_opt_in_to_avoid_man_db_trigger_hangs(self):
-        self.assertIn('RUN_APT_UPGRADE="False"', UBUNTU_SCRIPT)
-        self.assertIn('validate_boolean "RUN_APT_UPGRADE" "$RUN_APT_UPGRADE"', UBUNTU_SCRIPT)
-        self.assertIn('if [ "$RUN_APT_UPGRADE" = "True" ]; then', UBUNTU_SCRIPT)
-        self.assertIn('apt_get upgrade -y', UBUNTU_SCRIPT)
-        self.assertNotIn('\napt_get upgrade -y\napt_get install -y libpq-dev', UBUNTU_SCRIPT)
+    def test_general_apt_update_and_upgrade_step_is_removed(self):
+        self.assertNotIn('RUN_APT_UPGRADE', UBUNTU_SCRIPT)
+        self.assertNotIn('apt_get upgrade -y', UBUNTU_SCRIPT)
+        self.assertNotIn('---- Update Server ----', UBUNTU_SCRIPT)
+        self.assertNotIn('# Update Server', UBUNTU_SCRIPT)
+        self.assertNotIn('\napt_get update -y\napt_get install -y libpq-dev', UBUNTU_SCRIPT)
+        self.assertIn("/etc/apt/sources.list.d/pgdg.list'", UBUNTU_SCRIPT)
+        self.assertIn('apt_get update -y\n    apt_get install -y postgresql-16', UBUNTU_SCRIPT)
+
+    def test_debian_installer_general_update_and_upgrade_step_is_removed(self):
+        self.assertNotIn('---- Update Server ----', DEBIAN_SCRIPT)
+        self.assertNotIn('# Update Server', DEBIAN_SCRIPT)
+        self.assertNotIn('sudo apt-get update', DEBIAN_SCRIPT)
+        self.assertNotIn('sudo apt-get upgrade -y', DEBIAN_SCRIPT)
 
     def test_postgresql_readiness_wait_is_bounded(self):
         self.assertIn('POSTGRES_READY_TIMEOUT_SECONDS="120"', UBUNTU_SCRIPT)
